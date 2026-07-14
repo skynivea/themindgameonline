@@ -7,11 +7,10 @@ const io = new Server(server);
 
 const rooms = {};
 
-// 💻 [수정본] 올바르게 작동하는 카드 섞기(셔플) 함수
+// 💻 올바르게 작동하는 카드 섞기(셔플) 함수
 function shuffle(array) {
   for (let i = array.length - 1; i > 0; i--) {
     const j = Math.floor(Math.random() * (i + 1));
-    // 이 부분의 세미콜론(;) 누락과 문법을 확실하게 수정했습니다.
     let temp = array[i];
     array[i] = array[j];
     array[j] = temp;
@@ -50,21 +49,20 @@ io.on('connection', (socket) => {
     if (!room) return;
     const pCount = room.players.length;
     
-    let maxLvl = 12, startLives = 2, startShuri = 1;
-    if (pCount === 3) { maxLvl = 10; startLives = 3; }
-    if (pCount >= 4) { maxLvl = 8; startLives = 4; }
+    // [버그 수정 2번] 변수명을 확실하게 통일하여 인원별 수리검/목숨 세팅 오류 해결
+    let maxLvl = 12, startLives = 2, startShurikens = 1;
+    if (pCount === 3) { maxLvl = 10; startLives = 3; startShurikens = 1; }
+    if (pCount >= 4) { maxLvl = 8; startLives = 4; startShurikens = 1; }
 
     room.gameState = {
-      level: 1, maxLevel: maxLvl, lives: startLives, shurikens: startShuri, playedCards: [],
-      focusPlayers: [], // 현재 정신 집중 중인 플레이어 ID 목록
-      readyPlayers: []  // 다음 레벨 준비 완료를 누른 플레이어 ID 목록
+      level: 1, maxLevel: maxLvl, lives: startLives, shurikens: startShurikens, playedCards: [],
+      focusPlayers: [], 
+      readyPlayers: []  
     };
 
-    // 게임 시작 시 카드를 바로 섞지 않고, '정신 집중' 단계를 먼저 시작합니다.
     startFocusPhase(room, roomCode);
   });
 
-  // ★ 정신 집중: 마우스 클릭 유지(KeyDown/MouseDown)
   socket.on('focus_hand_down', (roomCode) => {
     const room = rooms[roomCode];
     if (!room || !room.gameState || room.gameState.isFocusComplete) return;
@@ -73,16 +71,13 @@ io.on('connection', (socket) => {
       room.gameState.focusPlayers.push(socket.id);
       io.to(roomCode).emit('update_focus_status', room.gameState.focusPlayers);
       
-      // 모든 인원이 손을 모았는지 확인
       if (room.gameState.focusPlayers.length === room.players.length) {
         room.gameState.isFocusComplete = true;
         io.to(roomCode).emit('focus_success_countdown');
         
-        // 2초 뒤에 실제로 카드를 배분하고 본격 게임 레이아웃을 쏩니다.
         setTimeout(() => {
           if(room && room.gameState) {
             dealCards(room);
-            // 정신집중 완료 후 플래그 초기화
             room.gameState.focusPlayers = [];
             room.gameState.isFocusComplete = false;
           }
@@ -91,7 +86,6 @@ io.on('connection', (socket) => {
     }
   });
 
-  // ★ 정신 집중: 마우스 뗌(KeyUp/MouseUp) -> 손 뗌 처리
   socket.on('focus_hand_up', (roomCode) => {
     const room = rooms[roomCode];
     if (!room || !room.gameState || room.gameState.isFocusComplete) return;
@@ -103,39 +97,55 @@ io.on('connection', (socket) => {
     }
   });
 
- socket.on('play_card', (data) => {
+  socket.on('play_card', (data) => {
     const { roomCode, cardNumber } = data;
     const room = rooms[roomCode];
     if (!room || !room.gameState) return;
 
+    // 1. 현재 전 서버 통틀어 가장 낮은 카드가 무엇인지 탐색
     let lowestCard = 101;
-    let lowestPlayer = null;
     room.players.forEach(p => {
       if (p.hand && p.hand.length > 0 && p.hand[0] < lowestCard) {
         lowestCard = p.hand[0];
-        lowestPlayer = p;
       }
     });
 
     const playingPlayer = room.players.find(p => p.id === socket.id);
     if (!playingPlayer) return;
 
+    // 2. 오름차순 원칙 검사
     if (cardNumber === lowestCard) {
-      // [수정] 내 손패에서 카드를 확실하게 먼저 제거합니다.
+      // 정답인 경우: 낸 사람의 손패 맨 앞장 제거
       playingPlayer.hand.shift();
       room.gameState.playedCards.push({ val: cardNumber, isMistake: false });
       
-      // [수정] 카드가 완전히 지워진 것을 확인한 '후'에 레벨 클리어를 체크합니다!
       if (!checkLevelComplete(room, roomCode)) {
         sendGameState(room);
       }
     } else {
+      // [버그 수정 5번] 오답인 경우 원작 규칙 적용:
+      // 낸 카드(cardNumber)보다 낮거나 같은 카드를 들고 있던 '모든 플레이어'의 카드를 강제로 다 공개하고 버립니다.
       room.gameState.lives--;
-      lowestPlayer.hand.shift();
-      room.gameState.playedCards.push({ val: lowestCard, isMistake: true });
       
+      room.players.forEach(p => {
+        if (p.hand && p.hand.length > 0) {
+          // 낸 카드보다 작은 카드가 손패에 있다면 전부 추출해서 버림 처리
+          while (p.hand.length > 0 && p.hand[0] < cardNumber) {
+            const lowCard = p.hand.shift();
+            room.gameState.playedCards.push({ val: lowCard, isMistake: true });
+          }
+        }
+      });
+
+      // 방금 낸 카드 자체도 손패에서 지우고 바닥에 깔아줍니다.
+      playingPlayer.hand.shift();
+      room.gameState.playedCards.push({ val: cardNumber, isMistake: true });
+      
+      // 버려진 카드들을 숫자 순서대로 이쁘게 정렬해서 히스토리에 반영
+      room.gameState.playedCards.sort((a, b) => a.val - b.val);
+
       io.to(roomCode).emit('mistake_animation', { 
-        lowestCard: lowestCard, 
+        lowestCard: cardNumber, // 낸 카드를 기준으로 애니메이션 작동
         lives: room.gameState.lives 
       });
 
@@ -151,7 +161,6 @@ io.on('connection', (socket) => {
     }
   });
 
-  // ★ 버그 2번 해결: 타인이 클릭했을 때 카드가 중복 리프레시되는 버그 차단
   socket.on('next_level_ready', (roomCode) => {
     const room = rooms[roomCode];
     if (!room || !room.gameState) return;
@@ -160,9 +169,8 @@ io.on('connection', (socket) => {
       room.gameState.readyPlayers.push(socket.id);
     }
 
-    // 모든 인원이 클릭해서 합의했을 때만 딱 한 번 다음 레벨 정신 집중 페이즈로 이동
     if (room.gameState.readyPlayers.length === room.players.length) {
-      room.gameState.readyPlayers = []; // 초기화
+      room.gameState.readyPlayers = []; 
       startFocusPhase(room, roomCode);
     }
   });
@@ -175,58 +183,54 @@ io.on('connection', (socket) => {
     io.to(roomCode).emit('start_shuriken_vote', { total: room.players.length });
   });
 
-// 💻 [수정본] vote_shuriken 이벤트 수신부 전체 교체
-socket.on('vote_shuriken', (data) => {
-  const { roomCode, vote } = data;
-  const room = rooms[roomCode];
-  if (!room || !room.gameState || !room.gameState.shurikenVote) return;
-  
-  if (room.gameState.shurikenVote.voters.includes(socket.id)) return;
-  
-  room.gameState.shurikenVote.voters.push(socket.id);
-  if (vote === 'yes') room.gameState.shurikenVote.yes++;
-  else room.gameState.shurikenVote.no++;
-  
-  io.to(roomCode).emit('update_shuriken_vote', {
-    yes: room.gameState.shurikenVote.yes,
-    no: room.gameState.shurikenVote.no,
-    total: room.players.length
-  });
+  socket.on('vote_shuriken', (data) => {
+    const { roomCode, vote } = data;
+    const room = rooms[roomCode];
+    if (!room || !room.gameState || !room.gameState.shurikenVote) return;
+    
+    if (room.gameState.shurikenVote.voters.includes(socket.id)) return;
+    
+    room.gameState.shurikenVote.voters.push(socket.id);
+    if (vote === 'yes') room.gameState.shurikenVote.yes++;
+    else room.gameState.shurikenVote.no++;
+    
+    io.to(roomCode).emit('update_shuriken_vote', {
+      yes: room.gameState.shurikenVote.yes,
+      no: room.gameState.shurikenVote.no,
+      total: room.players.length
+    });
 
-  if (room.gameState.shurikenVote.voters.length === room.players.length) {
-    if (room.gameState.shurikenVote.yes === room.players.length) {
-      room.gameState.shurikens--;
-      let discardedCards = [];
-      
-      room.players.forEach(p => {
-        if (p.hand && p.hand.length > 0) {
-          // [★버그 수정] 혹시라도 순서가 꼬여있을지 모르는 손패를 "숫자 오름차순"으로 확실하게 재정렬합니다!
-          p.hand.sort((a, b) => a - b);
-          
-          // 이제 정렬이 완벽하니 shift()를 하면 무조건 '가장 작은 카드'가 나옵니다.
-          const card = p.hand.shift();
-          discardedCards.push(card);
-        }
-      });
-      
-      discardedCards.sort((a, b) => a - b);
-      discardedCards.forEach(card => {
-        room.gameState.playedCards.push({ val: card, isMistake: false });
-      });
-      
-      io.to(roomCode).emit('shuriken_success_trigger', discardedCards);
-      delete room.gameState.shurikenVote;
-      
-      setTimeout(() => {
-        if (!checkLevelComplete(room, roomCode)) sendGameState(room);
-      }, 1000);
-    } else {
-      io.to(roomCode).emit('shuriken_cancelled_trigger');
-      delete room.gameState.shurikenVote;
-      sendGameState(room);
+    if (room.gameState.shurikenVote.voters.length === room.players.length) {
+      if (room.gameState.shurikenVote.yes === room.players.length) {
+        room.gameState.shurikens--;
+        let discardedCards = [];
+        
+        room.players.forEach(p => {
+          if (p.hand && p.hand.length > 0) {
+            p.hand.sort((a, b) => a - b);
+            const card = p.hand.shift();
+            discardedCards.push(card);
+          }
+        });
+        
+        discardedCards.sort((a, b) => a - b);
+        discardedCards.forEach(card => {
+          room.gameState.playedCards.push({ val: card, isMistake: false });
+        });
+        
+        io.to(roomCode).emit('shuriken_success_trigger', discardedCards);
+        delete room.gameState.shurikenVote;
+        
+        setTimeout(() => {
+          if (!checkLevelComplete(room, roomCode)) sendGameState(room);
+        }, 1000);
+      } else {
+        io.to(roomCode).emit('shuriken_cancelled_trigger');
+        delete room.gameState.shurikenVote;
+        sendGameState(room);
+      }
     }
-  }
-});
+  });
 
   socket.on('send_emoticon', (data) => {
     const { roomCode, emoticon } = data;
@@ -239,41 +243,18 @@ socket.on('vote_shuriken', (data) => {
     
     const index = room.players.findIndex(p => p.id === socket.id);
     if (index !== -1) {
-      const wasHost = room.players[index].isHost;
       room.players.splice(index, 1);
       
+      // [버그 수정 1번] 게임 도중 누군가 탈주하면 남은 사람들을 메인 화면으로 강제 이동시킵니다.
       if (room.players.length === 0) {
         delete rooms[currentRoom];
-        return;
-      }
-
-      if (wasHost && room.players.length > 0) {
-        room.players[0].isHost = true;
-      }
-
-      if (room.gameState) {
-        if (room.gameState.shurikenVote) delete room.gameState.shurikenVote;
-        
-        // 정신집중 인원 보정
-        const fIdx = room.gameState.focusPlayers.indexOf(socket.id);
-        if (fIdx !== -1) room.gameState.focusPlayers.splice(fIdx, 1);
-
-        // 레벨 준비 인원 보정
-        const rIdx = room.gameState.readyPlayers.indexOf(socket.id);
-        if (rIdx !== -1) room.gameState.readyPlayers.splice(rIdx, 1);
-
-        io.to(currentRoom).emit('shuriken_cancelled_trigger');
-      }
-
-      io.to(currentRoom).emit('update_players', room.players);
-      
-      if (room.gameState) {
-        if (!checkLevelComplete(room, currentRoom)) sendGameState(room);
+      } else {
+        io.to(currentRoom).emit('game_over_trigger', "🚨 플레이어가 퇴장하여 게임을 더 이상 진행할 수 없습니다. 방이 폭파됩니다.");
+        delete rooms[currentRoom];
       }
     }
   });
 
-  // ★ 정신 집중 전용 화면 트리거 함수
   function startFocusPhase(room, roomCode) {
     const playerInfos = room.players.map(p => ({ id: p.id, name: p.name }));
     io.to(roomCode).emit('trigger_focus_phase', {
@@ -284,7 +265,7 @@ socket.on('vote_shuriken', (data) => {
     });
   }
 
-function dealCards(room) {
+  function dealCards(room) {
     let deck = Array.from({length: 100}, (_, i) => i + 1);
     shuffle(deck);
     room.gameState.playedCards = [];
@@ -292,12 +273,11 @@ function dealCards(room) {
     room.players.forEach(player => {
       player.hand = [];
       for (let i = 0; i < room.gameState.level; i++) player.hand.push(deck.pop());
-      
-      // [수정] 자바스크립트 오름차순 숫자 정렬 오류를 완벽하게 해결 (a - b 추가)
       player.hand.sort((a, b) => a - b);
     });
     sendGameState(room);
   }
+
   function checkLevelComplete(room, roomCode) {
     const remaining = room.players.reduce((acc, p) => acc + (p.hand ? p.hand.length : 0), 0);
     if (remaining === 0) {
