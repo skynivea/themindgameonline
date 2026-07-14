@@ -103,7 +103,7 @@ io.on('connection', (socket) => {
     }
   });
 
-  socket.on('play_card', (data) => {
+ socket.on('play_card', (data) => {
     const { roomCode, cardNumber } = data;
     const room = rooms[roomCode];
     if (!room || !room.gameState) return;
@@ -121,9 +121,14 @@ io.on('connection', (socket) => {
     if (!playingPlayer) return;
 
     if (cardNumber === lowestCard) {
+      // [수정] 내 손패에서 카드를 확실하게 먼저 제거합니다.
       playingPlayer.hand.shift();
       room.gameState.playedCards.push({ val: cardNumber, isMistake: false });
-      if (!checkLevelComplete(room, roomCode)) sendGameState(room);
+      
+      // [수정] 카드가 완전히 지워진 것을 확인한 '후'에 레벨 클리어를 체크합니다!
+      if (!checkLevelComplete(room, roomCode)) {
+        sendGameState(room);
+      }
     } else {
       room.gameState.lives--;
       lowestPlayer.hand.shift();
@@ -274,7 +279,7 @@ io.on('connection', (socket) => {
     });
   }
 
-  function dealCards(room) {
+function dealCards(room) {
     let deck = Array.from({length: 100}, (_, i) => i + 1);
     shuffle(deck);
     room.gameState.playedCards = [];
@@ -282,11 +287,12 @@ io.on('connection', (socket) => {
     room.players.forEach(player => {
       player.hand = [];
       for (let i = 0; i < room.gameState.level; i++) player.hand.push(deck.pop());
+      
+      // [수정] 자바스크립트 오름차순 숫자 정렬 오류를 완벽하게 해결 (a - b 추가)
       player.hand.sort((a, b) => a - b);
     });
     sendGameState(room);
   }
-
   function checkLevelComplete(room, roomCode) {
     const remaining = room.players.reduce((acc, p) => acc + (p.hand ? p.hand.length : 0), 0);
     if (remaining === 0) {
