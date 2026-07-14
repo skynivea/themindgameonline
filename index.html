@@ -453,51 +453,90 @@
       }, delay);
     }
 
-    /* 오름차순 실패 시: 디버깅 완비 버전 */
+/* 오름차순 실패 시: 완벽한 개연성 중심 릴레이 애니메이션 */
     socket.on('mistake_animation', (data) => {
       isPlayLocked = true;
       document.getElementById('my-hand').classList.add('disabled-hand');
       document.body.classList.add('flash-bg');
-      
-      // 서버에서 보내주는 sequence 데이터가 가장 정확하므로 이를 1순위로 사용합니다.
+
       const mistakeSequence = data.sequence || [];
-      
-      // 만약 sequence가 비어있다면 기존 폴백 가동
       let skippedList = [];
+      
       if (mistakeSequence.length > 0) {
         skippedList = mistakeSequence.map(item => ({
           val: typeof item === 'object' ? item.val : item,
-          playerId: item.playerId || myId
+          playerId: item.playerId || myId,
+          isTriggerCard: item.isTriggerCard || false // 실수로 직접 낸 카드(예: 17)인지 여부
         }));
       } else {
-        const fallbackVal = data.lowestCard || (data.sequence && data.sequence[0]) || 0;
-        const fallbackName = data.lowestCardPlayerName || "누군가";
-        skippedList.push({ val: fallbackVal, playerId: data.lowestCardPlayerId || myId });
+        const fallbackVal = data.lowestCard || 0;
+        skippedList.push({ val: fallbackVal, playerId: data.lowestCardPlayerId || myId, isTriggerCard: false });
       }
 
-      // 오름차순 정렬 보장
+      // 오름차순 정렬
       skippedList.sort((a, b) => a.val - b.val);
 
-      // 릴레이 카드 낙하 연출 작동
+      // 릴레이 연출 작동
       skippedList.forEach((cardInfo, idx) => {
-        dropCardFromPlayer(cardInfo.playerId, cardInfo.val, idx * 600, 100 + idx);
+        const isTrigger = cardInfo.isTriggerCard || (cardInfo.val === data.lowestCard && cardInfo.playerId === (data.playerId || myId));
+        
+        if (isTrigger) {
+          // [개연성 패치 1] 내가 이미 낸 카드(17)는 내 몸에서 날아가지 않습니다.
+          // 대신 테이블 바로 옆(우측 대기 구역)에 가만히 생성해 두었다가, 
+          // 상대방 카드들(10, 11)이 먼저 날아와 꽂힌 후 마지막 차례에 스르륵 중앙으로 합쳐집니다!
+          setTimeout(() => {
+            const tableArea = document.getElementById('table-area');
+            if (!tableArea) return;
+
+            const rainCard = document.createElement('div');
+            rainCard.className = 'card raining-card mistake-trigger';
+            rainCard.innerText = cardInfo.val;
+            rainCard.style.zIndex = 100 + idx;
+            
+            const tableRect = tableArea.getBoundingClientRect();
+            // 처음엔 테이블 우측 대기 구역에 소환
+            const waitX = tableRect.left + tableRect.width + 10;
+            const waitY = tableRect.top + tableRect.height / 2 - 39;
+            
+            rainCard.style.left = `${waitX}px`;
+            rainCard.style.top = `${waitY}px`;
+            rainCard.style.transform = 'scale(1) rotate(15deg)';
+            rainCard.style.opacity = '0.7'; // 실수 대기 카드임을 시각화
+            rainCard.style.border = '2px dashed #ff4757'; // 빨간 점선 테두리
+
+            document.body.appendChild(rainCard);
+
+            // 잠시 후 중앙으로 스르륵 합쳐지는 애니메이션
+            setTimeout(() => {
+              const destX = tableRect.left + tableRect.width / 2 + (Math.random() * 40 - 20);
+              const destY = tableRect.top + tableRect.height / 2 + (Math.random() * 30 - 15);
+              const rot = (Math.random() * 20) - 10;
+              
+              rainCard.style.left = `${destX - 26}px`;
+              rainCard.style.top = `${destY - 39}px`;
+              rainCard.style.transform = `scale(1) rotate(${rot}deg)`;
+              rainCard.style.opacity = '1';
+              rainCard.style.border = ''; // 일반 카드로 복구
+            }, 800);
+
+          }, idx * 600);
+        } else {
+          // [개연성 패치 2] 꼬여버린 타인의 누락 카드(10, 11)만 정상적으로 프로필에서 뿜어져 나옵니다.
+          dropCardFromPlayer(cardInfo.playerId, cardInfo.val, idx * 600, 100 + idx);
+        }
       });
 
       // 오버레이창 알림 띄우기
-      const totalDelay = skippedList.length * 600 + 400;
+      const totalDelay = skippedList.length * 600 + 1200; // 대기 카드 합쳐지는 속도 고려하여 딜레이 살짝 증가
       setTimeout(() => {
         document.querySelectorAll('.opponent-box').forEach(box => box.classList.remove('highlight-mistake'));
 
         const overlay = document.getElementById('mistake-overlay');
-        
-        // [디버깅] undefined 방어용 값 추출
         const displayCardNum = skippedList[0] ? skippedList[0].val : (data.lowestCard || "❓");
         document.getElementById('failed-card-display').innerText = displayCardNum;
         
         if (data.message) {
           document.getElementById('mistake-player-announce').innerText = data.message;
-        } else if (data.lowestCardPlayerName) {
-          document.getElementById('mistake-player-announce').innerText = `성급하게 카드를 내려서 [${data.lowestCardPlayerName}] 님의 낮은 카드가 누락되었습니다!`;
         } else {
           document.getElementById('mistake-player-announce').innerText = `오름차순 순서가 꼬였습니다! 먼저 낸 카드가 존재합니다.`;
         }
