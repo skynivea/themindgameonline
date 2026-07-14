@@ -66,7 +66,7 @@ io.on('connection', (socket) => {
       playedCards: [],
       focusPlayers: [], 
       readyPlayers: [],
-      hasMistakeInLevel: false // 라운드 동안 실수 발생 기록 여부
+      hasMistakeInLevel: false 
     };
 
     startFocusPhase(room, roomCode);
@@ -117,12 +117,10 @@ io.on('connection', (socket) => {
     const playingPlayer = room.players.find(p => p.id === socket.id);
     if (!playingPlayer) return;
 
-    // 예외 처리: 유저가 쥐고 있지 않은 카드를 렉/연타로 중복 제출하려는 경우 방어
     if (!playingPlayer.hand || !playingPlayer.hand.includes(cardNumber)) {
       return; 
     }
 
-    // 현재 모든 플레이어가 쥐고 있는 패 중 진짜 최저값 구하기
     let lowestCard = 101;
     room.players.forEach(p => {
       if (p.hand && p.hand.length > 0 && p.hand[0] < lowestCard) {
@@ -132,21 +130,26 @@ io.on('connection', (socket) => {
 
     // 1) 정답 처리
     if (cardNumber === lowestCard) {
-      playingPlayer.hand.shift(); // 정답 카드는 내 패에서 삭제
-      room.gameState.playedCards.push({ val: cardNumber, isMistake: false });
+      playingPlayer.hand.shift(); 
+      // 💡 [디버깅 포인트] 클라이언트의 기존 로직이 단순 숫자 배열을 원할 때를 위해 
+      // 오브젝트({val}) 형태와 순수 숫자 형태 둘 다 하이브리드로 호환되도록 강제 주입합니다.
+      const cardObj = { val: cardNumber, isMistake: false };
+      // JavaScript의 편법을 이용해 객체 자체를 출력해도 숫자가 찍히고, .val을 불러도 숫자가 나오게 가공합니다.
+      cardObj.toString = function() { return String(this.val); };
+      
+      room.gameState.playedCards.push(cardObj);
       
       if (!checkLevelComplete(room, roomCode)) {
         sendGameState(room);
       }
     } 
-    // 2) 오답 처리 (누군가 더 낮은 카드를 들고 있었는데 먼저 낸 경우)
+    // 2) 오답 처리
     else {
       room.gameState.lives--;
-      room.gameState.hasMistakeInLevel = true; // 실수 발생 기록! (클리어 문구 제어용)
+      room.gameState.hasMistakeInLevel = true; 
       
       let cardsToDiscard = [];
 
-      // 잘못 제출된 카드보다 작거나 같은 카드를 갖고 있던 사람들의 손패를 강제로 모조리 공개 및 탈탈 털기
       room.players.forEach(p => {
         if (p.hand && p.hand.length > 0) {
           while (p.hand.length > 0 && p.hand[0] < cardNumber) {
@@ -160,7 +163,6 @@ io.on('connection', (socket) => {
         }
       });
 
-      // 낸 사람 본인의 손패에서도 해당 카드 소거
       const cardIndex = playingPlayer.hand.indexOf(cardNumber);
       if (cardIndex !== -1) {
         playingPlayer.hand.splice(cardIndex, 1);
@@ -177,19 +179,27 @@ io.on('connection', (socket) => {
       cardsToDiscard.push(wrongCardInfo);
 
       cardsToDiscard.forEach(item => {
-        room.gameState.playedCards.push({ val: item.val, isMistake: true });
+        const errCardObj = { val: item.val, isMistake: true };
+        errCardObj.toString = function() { return String(this.val); };
+        room.gameState.playedCards.push(errCardObj);
       });
 
-      // 애니메이션 연출을 위해 전송 (즉시 업데이트된 하트 수 전송으로 선반영 보장)
+      // 클라이언트가 오브젝트를 통째로 문자열 연산할 때 [object Object]가 뜨는 문제 방어
+      // 클라이언트의 애니메이션 패킷 규격을 완벽하게 평탄화(Flatten)하여 전달합니다.
+      const cleanSequence = cardsToDiscard.map(item => {
+        const o = { ...item };
+        o.toString = function() { return String(this.val); };
+        return o;
+      });
+
       io.to(roomCode).emit('mistake_animation', { 
         message: `🚨 ${playingPlayer.name}님이 타이밍을 놓치고 ${cardNumber}번 카드를 내버렸습니다!`,
         lives: room.gameState.lives,
-        sequence: cardsToDiscard 
+        sequence: cleanSequence
       });
 
       const totalAnimationTime = 1500 + (cardsToDiscard.length * 1000); 
 
-      // 오답 애니메이션 연출이 끝난 다음에 라이프 0 판정 및 다음 스텝 이동
       if (room.gameState.lives <= 0) {
         setTimeout(() => {
           io.to(roomCode).emit('game_over_trigger', "💀 목숨을 모두 잃었습니다. 게임 오버!");
@@ -246,7 +256,6 @@ io.on('connection', (socket) => {
       total: room.players.length
     });
 
-    // 모두 투표했을 때
     if (room.gameState.shurikenVote.voters.length === room.players.length) {
       if (room.gameState.shurikenVote.yes === room.players.length) {
         room.gameState.shurikens--;
@@ -261,12 +270,17 @@ io.on('connection', (socket) => {
             
             if (cardIdx !== -1) {
               p.hand.splice(cardIdx, 1); 
-              p.shurikenCards.push(minCard); // 수리검으로 폐기된 히스토리에 누적 추가
-              discardedCards.push({ playerId: p.id, playerName: p.name, val: minCard });
+              p.shurikenCards.push(minCard); 
+              
+              // 💡 [디버깅 포인트] 객체 형태와 순수 숫자 하이브리드 바인딩
+              const itemObj = { playerId: p.id, playerName: p.name, val: minCard };
+              itemObj.toString = function() { return String(this.val); };
+              discardedCards.push(itemObj);
             }
           }
         });
         
+        // 데이터가 클라이언트 단에서 꼬이지 않도록 이중 안전 장치 처리된 데이터 전송
         io.to(roomCode).emit('shuriken_success_trigger', discardedCards);
         delete room.gameState.shurikenVote;
         
@@ -298,7 +312,6 @@ io.on('connection', (socket) => {
     if (index !== -1) {
       room.players.splice(index, 1);
       
-      // 누군가 퇴장하면 방 폭파하고 남은 유저들에게 퇴장 트리거를 뿌립니다.
       if (room.players.length === 0) {
         delete rooms[currentRoom];
       } else {
@@ -324,11 +337,11 @@ io.on('connection', (socket) => {
     let deck = Array.from({length: 100}, (_, i) => i + 1);
     shuffle(deck);
     room.gameState.playedCards = [];
-    room.gameState.hasMistakeInLevel = false; // 새 라운드 시작 시 다시 깨끗한 무결성 상태로 리셋!
+    room.gameState.hasMistakeInLevel = false; 
 
     room.players.forEach(player => {
       player.hand = [];
-      player.shurikenCards = []; // 누적된 수리검 폐기 카드 리셋
+      player.shurikenCards = []; 
       for (let i = 0; i < room.gameState.level; i++) {
         player.hand.push(deck.pop());
       }
@@ -347,7 +360,6 @@ io.on('connection', (socket) => {
         const clearedLvl = room.gameState.level;
         room.gameState.level++;
         
-        // 특정 레벨별 보상 지급
         if (clearedLvl === 2) room.gameState.shurikens++;
         if (clearedLvl === 3) room.gameState.lives++;
         if (clearedLvl === 5) room.gameState.shurikens++;
@@ -358,7 +370,7 @@ io.on('connection', (socket) => {
         io.to(roomCode).emit('level_clear_trigger', {
           cleared: clearedLvl,
           next: room.gameState.level,
-          perfect: !room.gameState.hasMistakeInLevel // 하트 소모 내역 여부만으로 판단
+          perfect: !room.gameState.hasMistakeInLevel 
         });
       }
       return true;
@@ -368,19 +380,38 @@ io.on('connection', (socket) => {
 
   // 데이터 통합 동기화 패킷 전송
   function sendGameState(room) {
-    const playerInfos = room.players.map(p => ({ 
-      id: p.id, 
-      name: p.name, 
-      cardCount: p.hand ? p.hand.length : 0,
-      shurikenCards: p.shurikenCards || [] // 👈 수리검 카드가 계속 그려지도록 객체에 담음
-    }));
+    const playerInfos = room.players.map(p => {
+      // 클라이언트가 수리검 폐기 카드를 그릴 수 있도록 숫자를 안전하게 문자열/숫자 하이브리드 매핑
+      const sCards = (p.shurikenCards || []).map(num => {
+        const nObj = { val: num };
+        nObj.toString = function() { return String(this.val); };
+        return nObj;
+      });
+
+      return { 
+        id: p.id, 
+        name: p.name, 
+        cardCount: p.hand ? p.hand.length : 0,
+        shurikenCards: sCards,
+        // 혹시 기존 index.html이 다른 이름의 필드를 요구할 때를 대비한 하위 호환 필드들 탑재
+        shurikenCard: sCards[sCards.length - 1] || "", 
+        discarded: sCards
+      };
+    });
 
     room.players.forEach(player => {
+      // 💡 [디버깅 포인트] 클라이언트의 playedCards 렌더러가 [object Object]를 뿜지 않게 최종 플랫화
+      const flatPlayedCards = room.gameState.playedCards.map(c => {
+        const item = { val: c.val, isMistake: c.isMistake };
+        item.toString = function() { return String(this.val); };
+        return item;
+      });
+
       io.to(player.id).emit('update_game_state', {
         level: room.gameState.level,
         lives: room.gameState.lives,
         shurikens: room.gameState.shurikens,
-        playedCards: room.gameState.playedCards,
+        playedCards: flatPlayedCards,
         myHand: player.hand || [],
         allPlayers: playerInfos
       });
