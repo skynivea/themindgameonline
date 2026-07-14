@@ -1,307 +1,323 @@
-<!DOCTYPE html>
-<html lang="ko">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>The Mind Online</title>
-    <style>
-        * {
-            box-sizing: border-box;
-            margin: 0;
-            padding: 0;
-            user-select: none;
-            -webkit-user-select: none;
-            -webkit-tap-highlight-color: transparent;
-        }
-        body {
-            background-color: #121214;
-            color: #e1e1e6;
-            font-family: -apple-system, BlinkMacSystemFont, sans-serif;
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            justify-content: flex-start;
-            min-height: 100vh;
-            padding: 15px;
-        }
-        .container {
-            width: 100%;
-            max-width: 480px;
-            display: flex;
-            flex-direction: column;
-            gap: 15px;
-        }
-        .screen {
-            background: #1e1e22;
-            border-radius: 16px;
-            padding: 20px;
-            box-shadow: 0 8px 24px rgba(0,0,0,0.4);
-            display: flex;
-            flex-direction: column;
-            gap: 12px;
-        }
-        h2 { text-align: center; color: #a67cff; margin-bottom: 10px; }
-        input, button {
-            width: 100%;
-            padding: 14px;
-            border-radius: 8px;
-            border: none;
-            font-size: 16px;
-            font-weight: bold;
-        }
-        input { background: #2a2a30; color: #fff; text-align: center; }
-        button { background: #6200ee; color: #fff; cursor: pointer; transition: background 0.1s; }
-        button:active { background: #3700b3; }
+const express = require('express');
+const app = express();
+const http = require('http');
+const server = http.createServer(app);
+const { Server } = require("socket.io");
+const io = new Server(server);
+
+const rooms = {};
+
+// 💻 올바르게 작동하는 카드 섞기(셔플) 함수
+function shuffle(array) {
+  for (let i = array.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    let temp = array[i];
+    array[i] = array[j];
+    array[j] = temp;
+  }
+}
+
+app.get('/', (req, res) => res.sendFile(__dirname + '/index.html'));
+
+io.on('connection', (socket) => {
+  let currentRoom = null;
+
+  socket.on('create_room', (nickname) => {
+    const roomCode = Math.random().toString(36).substring(2, 6).toUpperCase();
+    socket.join(roomCode);
+    rooms[roomCode] = { players: [{ id: socket.id, name: nickname, isHost: true }] };
+    currentRoom = roomCode;
+    socket.emit('room_created', roomCode);
+    io.to(roomCode).emit('update_players', rooms[roomCode].players);
+  });
+
+  socket.on('join_room', (data) => {
+    const { code, nickname } = data;
+    if (rooms[code] && rooms[code].players.length < 4) {
+      socket.join(code);
+      rooms[code].players.push({ id: socket.id, name: nickname, isHost: false });
+      currentRoom = code;
+      socket.emit('room_joined', code);
+      io.to(code).emit('update_players', rooms[code].players);
+    } else {
+      socket.emit('error_msg', '방이 없거나 꽉 찼습니다.');
+    }
+  });
+
+  socket.on('start_game', (roomCode) => {
+    const room = rooms[roomCode];
+    if (!room) return;
+    const pCount = room.players.length;
+    
+    // [버그 수정 2번] 변수명을 확실하게 통일하여 인원별 수리검/목숨 세팅 오류 해결
+    let maxLvl = 12, startLives = 2, startShurikens = 1;
+    if (pCount === 3) { maxLvl = 10; startLives = 3; startShurikens = 1; }
+    if (pCount >= 4) { maxLvl = 8; startLives = 4; startShurikens = 1; }
+
+    room.gameState = {
+      level: 1, maxLevel: maxLvl, lives: startLives, shurikens: startShurikens, playedCards: [],
+      focusPlayers: [], 
+      readyPlayers: []  
+    };
+
+    startFocusPhase(room, roomCode);
+  });
+
+  socket.on('focus_hand_down', (roomCode) => {
+    const room = rooms[roomCode];
+    if (!room || !room.gameState || room.gameState.isFocusComplete) return;
+
+    if (!room.gameState.focusPlayers.includes(socket.id)) {
+      room.gameState.focusPlayers.push(socket.id);
+      io.to(roomCode).emit('update_focus_status', room.gameState.focusPlayers);
+      
+      if (room.gameState.focusPlayers.length === room.players.length) {
+        room.gameState.isFocusComplete = true;
+        io.to(roomCode).emit('focus_success_countdown');
         
-        /* 인게임 레이아웃 */
-        .status-bar {
-            display: grid;
-            grid-template-columns: repeat(3, 1fr);
-            gap: 8px;
-            text-align: center;
+        setTimeout(() => {
+          if(room && room.gameState) {
+            dealCards(room);
+            room.gameState.focusPlayers = [];
+            room.gameState.isFocusComplete = false;
+          }
+        }, 2000);
+      }
+    }
+  });
+
+  socket.on('focus_hand_up', (roomCode) => {
+    const room = rooms[roomCode];
+    if (!room || !room.gameState || room.gameState.isFocusComplete) return;
+
+    const idx = room.gameState.focusPlayers.indexOf(socket.id);
+    if (idx !== -1) {
+      room.gameState.focusPlayers.splice(idx, 1);
+      io.to(roomCode).emit('update_focus_status', room.gameState.focusPlayers);
+    }
+  });
+
+  socket.on('play_card', (data) => {
+    const { roomCode, cardNumber } = data;
+    const room = rooms[roomCode];
+    if (!room || !room.gameState) return;
+
+    // 1. 현재 전 서버 통틀어 가장 낮은 카드가 무엇인지 탐색
+    let lowestCard = 101;
+    room.players.forEach(p => {
+      if (p.hand && p.hand.length > 0 && p.hand[0] < lowestCard) {
+        lowestCard = p.hand[0];
+      }
+    });
+
+    const playingPlayer = room.players.find(p => p.id === socket.id);
+    if (!playingPlayer) return;
+
+    // 2. 오름차순 원칙 검사
+    if (cardNumber === lowestCard) {
+      // 정답인 경우: 낸 사람의 손패 맨 앞장 제거
+      playingPlayer.hand.shift();
+      room.gameState.playedCards.push({ val: cardNumber, isMistake: false });
+      
+      if (!checkLevelComplete(room, roomCode)) {
+        sendGameState(room);
+      }
+    } else {
+      // [버그 수정 5번] 오답인 경우 원작 규칙 적용:
+      // 낸 카드(cardNumber)보다 낮거나 같은 카드를 들고 있던 '모든 플레이어'의 카드를 강제로 다 공개하고 버립니다.
+      room.gameState.lives--;
+      
+      room.players.forEach(p => {
+        if (p.hand && p.hand.length > 0) {
+          // 낸 카드보다 작은 카드가 손패에 있다면 전부 추출해서 버림 처리
+          while (p.hand.length > 0 && p.hand[0] < cardNumber) {
+            const lowCard = p.hand.shift();
+            room.gameState.playedCards.push({ val: lowCard, isMistake: true });
+          }
         }
-        .status-card {
-            background: #1e1e22;
-            padding: 8px;
-            border-radius: 10px;
-            font-size: 12px;
-            border: 1px solid #2a2a30;
-        }
-        .status-card span { display: block; font-size: 16px; margin-top: 4px; font-weight: bold; }
+      });
+
+      // 방금 낸 카드 자체도 손패에서 지우고 바닥에 깔아줍니다.
+      playingPlayer.hand.shift();
+      room.gameState.playedCards.push({ val: cardNumber, isMistake: true });
+      
+      // 버려진 카드들을 숫자 순서대로 이쁘게 정렬해서 히스토리에 반영
+      room.gameState.playedCards.sort((a, b) => a.val - b.val);
+
+      io.to(roomCode).emit('mistake_animation', { 
+        lowestCard: cardNumber, // 낸 카드를 기준으로 애니메이션 작동
+        lives: room.gameState.lives 
+      });
+
+      if (room.gameState.lives <= 0) {
+        setTimeout(() => {
+          io.to(roomCode).emit('game_over_trigger', "💀 목숨을 모두 잃었습니다. 게임 오버!");
+        }, 2500);
+      } else {
+        setTimeout(() => {
+          if (!checkLevelComplete(room, roomCode)) sendGameState(room);
+        }, 2500);
+      }
+    }
+  });
+
+  socket.on('next_level_ready', (roomCode) => {
+    const room = rooms[roomCode];
+    if (!room || !room.gameState) return;
+
+    if (!room.gameState.readyPlayers.includes(socket.id)) {
+      room.gameState.readyPlayers.push(socket.id);
+    }
+
+    if (room.gameState.readyPlayers.length === room.players.length) {
+      room.gameState.readyPlayers = []; 
+      startFocusPhase(room, roomCode);
+    }
+  });
+
+  socket.on('propose_shuriken', (roomCode) => {
+    const room = rooms[roomCode];
+    if (!room || !room.gameState || room.gameState.shurikens <= 0 || room.gameState.shurikenVote) return;
+    
+    room.gameState.shurikenVote = { yes: 0, no: 0, total: room.players.length, voters: [] };
+    io.to(roomCode).emit('start_shuriken_vote', { total: room.players.length });
+  });
+
+  socket.on('vote_shuriken', (data) => {
+    const { roomCode, vote } = data;
+    const room = rooms[roomCode];
+    if (!room || !room.gameState || !room.gameState.shurikenVote) return;
+    
+    if (room.gameState.shurikenVote.voters.includes(socket.id)) return;
+    
+    room.gameState.shurikenVote.voters.push(socket.id);
+    if (vote === 'yes') room.gameState.shurikenVote.yes++;
+    else room.gameState.shurikenVote.no++;
+    
+    io.to(roomCode).emit('update_shuriken_vote', {
+      yes: room.gameState.shurikenVote.yes,
+      no: room.gameState.shurikenVote.no,
+      total: room.players.length
+    });
+
+    if (room.gameState.shurikenVote.voters.length === room.players.length) {
+      if (room.gameState.shurikenVote.yes === room.players.length) {
+        room.gameState.shurikens--;
+        let discardedCards = [];
         
-        .table-area {
-            background: #1a1a1e;
-            border: 2px dashed #444;
-            border-radius: 16px;
-            min-height: 140px;
-            display: flex;
-            flex-wrap: wrap;
-            align-content: center;
-            justify-content: center;
-            gap: 8px;
-            padding: 15px;
-        }
-        .my-hand {
-            display: flex;
-            justify-content: center;
-            gap: 8px;
-            flex-wrap: wrap;
-            margin-top: 10px;
-        }
-        .card {
-            width: 60px;
-            height: 85px;
-            background: linear-gradient(135deg, #3a3d40, #181719);
-            border: 2px solid #a8a8b2;
-            border-radius: 8px;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            font-size: 20px;
-            font-weight: 900;
-            color: #fff;
-            box-shadow: 0 4px 8px rgba(0,0,0,0.3);
-        }
-        .card.mistake { border-color: #ff5555; background: #4a1d1d; }
-        .my-hand .card { cursor: pointer; }
-        .my-hand .card:active { transform: scale(0.9) translateY(-5px); }
-
-        .player-list { font-size: 14px; background: #1a1a1e; padding: 10px; border-radius: 8px; }
-        .player-item { display: flex; justify-content: space-between; padding: 4px 0; }
+        room.players.forEach(p => {
+          if (p.hand && p.hand.length > 0) {
+            p.hand.sort((a, b) => a - b);
+            const card = p.hand.shift();
+            discardedCards.push(card);
+          }
+        });
         
-        /* 정신집중 구역 */
-        .focus-area { text-align: center; padding: 20px; background: #251b3d; border-radius: 12px; border: 1px solid #6200ee; }
-        .focus-btn { background: #03dac6; color: #000; margin-top: 10px; }
-    </style>
-</head>
-<body>
-
-<div class="container">
-    <!-- 로비 스크린 -->
-    <div id="lobby-screen" class="screen">
-        <h2>THE MIND</h2>
-        <input type="text" id="nickname-input" placeholder="닉네임 입력 (최대 5자)" maxlength="5">
-        <button id="create-btn">방 만들기</button>
-        <hr style="border: 0; height: 1px; background: #333; margin: 10px 0;">
-        <input type="text" id="code-input" placeholder="방 코드 4자리">
-        <button id="join-btn" style="background:#03dac6; color:#000;">방 입장하기</button>
-    </div>
-
-    <!-- 대기방 스크린 -->
-    <div id="room-screen" class="screen" style="display: none;">
-        <h2>방 코드: <span id="room-code-txt" style="color:#03dac6;">-</span></h2>
-        <div class="player-list" id="waiting-players"></div>
-        <button id="start-btn" style="display: none; background:#ffde03; color:#000;">게임 시작</button>
-        <p id="wait-msg" style="text-align:center; font-size:14px; color:#aaa;">방장이 시작하기를 기다리는 중...</p>
-    </div>
-
-    <!-- 인게임 스크린 -->
-    <div id="game-screen" style="display: none; flex-direction: column; gap: 12px;">
-        <div class="status-bar">
-            <div class="status-card">LEVEL<span id="txt-level">1</span></div>
-            <div class="status-card">LIVES<span id="txt-lives">❤️</span></div>
-            <div class="status-card">SHURIKEN<span id="txt-shurikens">🌟</span></div>
-        </div>
-
-        <div class="player-list" id="game-players"></div>
-
-        <!-- 정신집중 구역 -->
-        <div id="focus-zone" class="focus-area" style="display: none;">
-            <p id="focus-status-txt">정신을 집중하십시오...</p>
-            <button id="focus-btn" class="focus-btn">정신 집중 완료</button>
-        </div>
-
-        <div class="table-area" id="table-cards"></div>
+        discardedCards.sort((a, b) => a - b);
+        discardedCards.forEach(card => {
+          room.gameState.playedCards.push({ val: card, isMistake: false });
+        });
         
-        <div style="display:flex; gap:10px;">
-            <button id="shuriken-btn" style="background:#cf6679; flex:1; padding:10px; font-size:14px;">수리검 제안</button>
-            <button id="next-lvl-btn" style="background:#03dac6; color:#000; flex:1; padding:10px; font-size:14px; display:none;">다음 레벨 준비</button>
-        </div>
-
-        <div class="my-hand" id="my-cards"></div>
-    </div>
-</div>
-
-<script src="/socket.io/socket.io.js"></script>
-<script>
-    const socket = io();
-    let myRoomCode = "";
-
-    const lobbyScreen = document.getElementById('lobby-screen');
-    const roomScreen = document.getElementById('room-screen');
-    const gameScreen = document.getElementById('game-screen');
-
-    // 1. 방 생성 / 입장 이벤트 리스너 정의
-    document.getElementById('create-btn').onclick = () => {
-        const name = document.getElementById('nickname-input').value.trim();
-        if(!name) return alert('닉네임을 입력하세요!');
-        socket.emit('create_room', name);
-    };
-
-    document.getElementById('join-btn').onclick = () => {
-        const name = document.getElementById('nickname-input').value.trim();
-        const code = document.getElementById('code-input').value.trim().toUpperCase();
-        if(!name || !code) return alert('닉네임과 방 코드를 채워주세요!');
-        socket.emit('join_room', { code, nickname: name });
-    };
-
-    socket.on('room_created', (code) => {
-        myRoomCode = code;
-        lobbyScreen.style.display = 'none';
-        roomScreen.style.display = 'flex';
-        document.getElementById('room-code-txt').innerText = code;
-        document.getElementById('start-btn').style.display = 'block';
-        document.getElementById('wait-msg').style.display = 'none';
-    });
-
-    socket.on('room_joined', (code) => {
-        myRoomCode = code;
-        lobbyScreen.style.display = 'none';
-        roomScreen.style.display = 'flex';
-        document.getElementById('room-code-txt').innerText = code;
-    });
-
-    socket.on('update_players', (players) => {
-        const listDiv = document.getElementById('waiting-players');
-        listDiv.innerHTML = "<h3>접속 중인 유저</h3>" + players.map(p => `<div class='player-item'><span>${p.name}</span><b>${p.isHost ? '[방장]' : ''}</b></div>`).join('');
-    });
-
-    socket.on('error_msg', (msg) => alert(msg));
-
-    // 2. 게임 시작 연동
-    document.getElementById('start-btn').onclick = () => {
-        socket.emit('start_game', myRoomCode);
-    };
-
-    socket.on('trigger_focus_phase', (data) => {
-        roomScreen.style.display = 'none';
-        gameScreen.style.display = 'flex';
-        document.getElementById('focus-zone').style.display = 'block';
-        document.getElementById('next-lvl-btn').style.display = 'none';
-        document.getElementById('txt-level').innerText = data.level;
-        document.getElementById('txt-lives').innerText = "❤️ ".repeat(data.lives);
-        document.getElementById('txt-shurikens').innerText = "🌟 ".repeat(data.shurikens);
-        document.getElementById('focus-status-txt').innerText = `[레벨 ${data.level}] 정신을 집중하세요.`;
-        document.getElementById('table-cards').innerHTML = "";
-        document.getElementById('my-cards').innerHTML = "";
-    });
-
-    // 정신집중 완료 버튼 처리
-    document.getElementById('focus-btn').onclick = () => {
-        socket.emit('focus_hand_down', myRoomCode);
-        document.getElementById('focus-btn').disabled = true;
-    };
-
-    socket.on('update_focus_status', (readyPlayerIds) => {
-        document.getElementById('focus-status-txt').innerText = `정신 집중 중... (${readyPlayerIds.length}명 완료)`;
-    });
-
-    socket.on('focus_success_countdown', () => {
-        document.getElementById('focus-status-txt').innerText = "✨ 모두 집중 완료! 2초 뒤 시작합니다.";
-    });
-
-    // 3. 인게임 상태 업데이트 및 카드 드로우
-    socket.on('update_game_state', (state) => {
-        document.getElementById('focus-zone').style.display = 'none';
-        document.getElementById('focus-btn').disabled = false;
+        io.to(roomCode).emit('shuriken_success_trigger', discardedCards);
+        delete room.gameState.shurikenVote;
         
-        document.getElementById('txt-level').innerText = state.level;
-        document.getElementById('txt-lives').innerText = "❤️ ".repeat(state.lives);
-        document.getElementById('txt-shurikens').innerText = "🌟 ".repeat(state.shurikens);
+        setTimeout(() => {
+          if (!checkLevelComplete(room, roomCode)) sendGameState(room);
+        }, 1000);
+      } else {
+        io.to(roomCode).emit('shuriken_cancelled_trigger');
+        delete room.gameState.shurikenVote;
+        sendGameState(room);
+      }
+    }
+  });
 
-        // 유저 정보 렌더링
-        const pList = document.getElementById('game-players');
-        pList.innerHTML = state.allPlayers.map(p => `<div class='player-item'><span>${p.name}</span> <span>남은 카드: ${p.cardCount}장</span></div>`).join('');
+  socket.on('send_emoticon', (data) => {
+    const { roomCode, emoticon } = data;
+    io.to(roomCode).emit('show_emoticon', { playerId: socket.id, emoticon: emoticon });
+  });
 
-        // 테이블 바닥에 제출된 카드 렌더링
-        const table = document.getElementById('table-cards');
-        table.innerHTML = state.playedCards.map(c => `<div class="card ${c.isMistake ? 'mistake' : ''}">${c.val}</div>`).join('');
+  socket.on('disconnect', () => {
+    if (!currentRoom || !rooms[currentRoom]) return;
+    const room = rooms[currentRoom];
+    
+    const index = room.players.findIndex(p => p.id === socket.id);
+    if (index !== -1) {
+      room.players.splice(index, 1);
+      
+      // [버그 수정 1번] 게임 도중 누군가 탈주하면 남은 사람들을 메인 화면으로 강제 이동시킵니다.
+      if (room.players.length === 0) {
+        delete rooms[currentRoom];
+      } else {
+        io.to(currentRoom).emit('game_over_trigger', "🚨 플레이어가 퇴장하여 게임을 더 이상 진행할 수 없습니다. 방이 폭파됩니다.");
+        delete rooms[currentRoom];
+      }
+    }
+  });
 
-        // 내 손패 카드 렌더링
-        const hand = document.getElementById('my-cards');
-        hand.innerHTML = state.myHand.map(val => `<div class="card" onclick="playCard(${val})">${val}</div>`).join('');
+  function startFocusPhase(room, roomCode) {
+    const playerInfos = room.players.map(p => ({ id: p.id, name: p.name }));
+    io.to(roomCode).emit('trigger_focus_phase', {
+      level: room.gameState.level,
+      lives: room.gameState.lives,
+      shurikens: room.gameState.shurikens,
+      allPlayers: playerInfos
     });
+  }
 
-    window.playCard = (val) => {
-        socket.emit('play_card', { roomCode: myRoomCode, cardNumber: val });
-    };
+  function dealCards(room) {
+    let deck = Array.from({length: 100}, (_, i) => i + 1);
+    shuffle(deck);
+    room.gameState.playedCards = [];
 
-    // 4. 이벤트 및 오류 연동 애니메이션 트리거
-    socket.on('mistake_animation', (data) => {
-        alert(`🚨 아차! 누군가 오름차순 규칙을 깼습니다! (목숨 -1)`);
+    room.players.forEach(player => {
+      player.hand = [];
+      for (let i = 0; i < room.gameState.level; i++) player.hand.push(deck.pop());
+      player.hand.sort((a, b) => a - b);
     });
+    sendGameState(room);
+  }
 
-    socket.on('level_clear_trigger', (data) => {
-        alert(`🎉 레벨 ${data.cleared} 클리어!`);
-        document.getElementById('next-lvl-btn').style.display = 'block';
+  function checkLevelComplete(room, roomCode) {
+    const remaining = room.players.reduce((acc, p) => acc + (p.hand ? p.hand.length : 0), 0);
+    if (remaining === 0) {
+      if (room.gameState.level === room.gameState.maxLevel) {
+        io.to(roomCode).emit('game_over_trigger', "🎉 축하합니다! 모든 레벨을 클리어했습니다! 게임 승리!");
+      } else {
+        const clearedLvl = room.gameState.level;
+        room.gameState.level++;
+        
+        if (clearedLvl === 2) room.gameState.shurikens++;
+        if (clearedLvl === 3) room.gameState.lives++;
+        if (clearedLvl === 5) room.gameState.shurikens++;
+        if (clearedLvl === 6) room.gameState.lives++;
+        if (clearedLvl === 8) room.gameState.shurikens++;
+        if (clearedLvl === 9) room.gameState.lives++;
+
+        io.to(roomCode).emit('level_clear_trigger', {
+          cleared: clearedLvl,
+          next: room.gameState.level
+        });
+      }
+      return true;
+    }
+    return false;
+  }
+
+  function sendGameState(room) {
+    const playerInfos = room.players.map(p => ({ id: p.id, name: p.name, cardCount: p.hand ? p.hand.length : 0 }));
+    room.players.forEach(player => {
+      io.to(player.id).emit('update_game_state', {
+        level: room.gameState.level,
+        lives: room.gameState.lives,
+        shurikens: room.gameState.shurikens,
+        playedCards: room.gameState.playedCards,
+        myHand: player.hand || [],
+        allPlayers: playerInfos
+      });
     });
+  }
+});
 
-    document.getElementById('next-lvl-btn').onclick = () => {
-        socket.emit('next_level_ready', myRoomCode);
-    };
-
-    socket.on('game_over_trigger', (msg) => {
-        alert(msg);
-        location.reload(); // 강제 리로드하여 첫 로비화면 복귀
-    });
-
-    // 5. 수리검 투표 기능 연동
-    document.getElementById('shuriken-btn').onclick = () => {
-        socket.emit('propose_shuriken', myRoomCode);
-    };
-
-    socket.on('start_shuriken_vote', () => {
-        const choice = confirm("🌟 누군가 수리검 사용을 제안했습니다. 동의하십니까?");
-        socket.emit('vote_shuriken', { roomCode: myRoomCode, vote: choice ? 'yes' : 'no' });
-    });
-
-    socket.on('shuriken_success_trigger', (cards) => {
-        alert(`🌟 수리검 발동 성공! 각자 가장 낮은 카드 [${cards.join(', ')}]를 한 장씩 버렸습니다.`);
-    });
-
-    socket.on('shuriken_cancelled_trigger', () => {
-        alert(`❌ 수리검 제안이 거절되었습니다. 전원 만장일치여야 합니다.`);
-    });
-</script>
-</body>
-</html>
+const PORT = process.env.PORT || 3000;
+server.listen(PORT, () => console.log(`서버 오픈! 포트: ${PORT}`));
