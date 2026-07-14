@@ -183,7 +183,7 @@ io.on('connection', (socket) => {
     io.to(roomCode).emit('start_shuriken_vote', { total: room.players.length });
   });
 
-  socket.on('vote_shuriken', (data) => {
+socket.on('vote_shuriken', (data) => {
     const { roomCode, vote } = data;
     const room = rooms[roomCode];
     if (!room || !room.gameState || !room.gameState.shurikenVote) return;
@@ -207,7 +207,9 @@ io.on('connection', (socket) => {
         
         room.players.forEach(p => {
           if (p.hand && p.hand.length > 0) {
+            // [수정] 오름차순으로 완벽하게 정렬하여 가장 작은 카드가 0번 인덱스로 오도록 보장합니다.
             p.hand.sort((a, b) => a - b);
+            // 정렬된 배열의 맨 앞(가장 낮은 카드)을 제거하고 가져옵니다.
             const card = p.hand.shift();
             discardedCards.push(card);
           }
