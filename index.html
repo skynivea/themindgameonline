@@ -250,7 +250,7 @@
     </div>
   </div>
 
-  <script src="/socket.io/socket.io.js"></script>
+<script src="/socket.io/socket.io.js"></script>
   <script>
     const socket = io();
     let myId = '';
@@ -416,45 +416,32 @@
       }, delay);
     }
 
-    /* 오름차순 실패 시: 릴레이 경고 스포트라이트 및 카드 후두두 연출 */
+    /* 오름차순 실패 시: 디버깅 완비 버전 */
     socket.on('mistake_animation', (data) => {
       isPlayLocked = true;
       document.getElementById('my-hand').classList.add('disabled-hand');
       document.body.classList.add('flash-bg');
       
-      // 누락되었던 카드들 목록 (예: 백엔드가 skippedCards로 각각의 카드와 소유자ID 리스트를 내려준다고 가정)
-      // 만약 백엔드에서 [{val: 6, playerId: '...'}] 같은 배열 형태로 보낸다면 최고이고,
-      // 데이터가 그냥 값 배열(data.skippedCards)만 있다면, 들고있던 유저와 매칭하는 폴백 로직을 구상합니다.
-      const rawSkipped = data.skippedCardsInfo || []; 
+      // 서버에서 보내주는 sequence 데이터가 가장 정확하므로 이를 1순위로 사용합니다.
+      const mistakeSequence = data.sequence || [];
       
-      // 혹시 백엔드에서 skippedCardsInfo 형태가 아닐 경우의 간편 변환 연동
+      // 만약 sequence가 비어있다면 기존 폴백 가동
       let skippedList = [];
-      if (rawSkipped.length > 0) {
-        skippedList = rawSkipped;
-      } else if (data.skippedCards && data.skippedCards.length > 0) {
-        // 백엔드에서 그냥 숫자 카드 배열만 준 경우 -> 이 카드를 들고 있는 방 안의 실제 유저 추적
-        data.skippedCards.forEach(val => {
-          // 캐시된 플레이어 중 이 카드를 소유했던 사람 대조 (없으면 실수한 본인이나 랜덤 처리)
-          const owner = allPlayersCache.find(p => p.cards && p.cards.includes(val)) || { id: data.playerId || myId };
-          skippedList.push({ val: val, playerId: owner.id });
-        });
+      if (mistakeSequence.length > 0) {
+        skippedList = mistakeSequence.map(item => ({
+          val: typeof item === 'object' ? item.val : item,
+          playerId: item.playerId || myId
+        }));
       } else {
-        // 단일 카드 실패 정보 폴백
-        skippedList.push({ val: data.lowestCard, playerId: data.lowestCardPlayerId || data.playerId || myId });
-      }
-
-      // 성급하게 먼저 나가버린 마지막 카드(실수 원인) 정보도 릴레이 마지막에 추가
-      const finalCardVal = data.playedCardVal || data.lowestCard;
-      const mistakeMakerId = data.playerId || myId; // 성급히 낸 트롤러
-      
-      if (!skippedList.some(item => item.val === finalCardVal)) {
-        skippedList.push({ val: finalCardVal, playerId: mistakeMakerId });
+        const fallbackVal = data.lowestCard || (data.sequence && data.sequence[0]) || 0;
+        const fallbackName = data.lowestCardPlayerName || "누군가";
+        skippedList.push({ val: fallbackVal, playerId: data.lowestCardPlayerId || myId });
       }
 
       // 오름차순 정렬 보장
       skippedList.sort((a, b) => a.val - b.val);
 
-      // 릴레이 연출 작동
+      // 릴레이 카드 낙하 연출 작동
       skippedList.forEach((cardInfo, idx) => {
         dropCardFromPlayer(cardInfo.playerId, cardInfo.val, idx * 600, 100 + idx);
       });
@@ -462,13 +449,17 @@
       // 오버레이창 알림 띄우기
       const totalDelay = skippedList.length * 600 + 400;
       setTimeout(() => {
-        // 모든 하이라이트 흔적 제거
         document.querySelectorAll('.opponent-box').forEach(box => box.classList.remove('highlight-mistake'));
 
         const overlay = document.getElementById('mistake-overlay');
-        document.getElementById('failed-card-display').innerText = data.lowestCard;
         
-        if (data.lowestCardPlayerName) {
+        // [디버깅] undefined 방어용 값 추출
+        const displayCardNum = skippedList[0] ? skippedList[0].val : (data.lowestCard || "❓");
+        document.getElementById('failed-card-display').innerText = displayCardNum;
+        
+        if (data.message) {
+          document.getElementById('mistake-player-announce').innerText = data.message;
+        } else if (data.lowestCardPlayerName) {
           document.getElementById('mistake-player-announce').innerText = `성급하게 카드를 내려서 [${data.lowestCardPlayerName}] 님의 낮은 카드가 누락되었습니다!`;
         } else {
           document.getElementById('mistake-player-announce').innerText = `오름차순 순서가 꼬였습니다! 먼저 낸 카드가 존재합니다.`;
@@ -483,7 +474,6 @@
       isPlayLocked = false;
       document.getElementById('my-hand').classList.remove('disabled-hand');
       
-      // 화면 정리에 사용된 요소 청소
       document.querySelectorAll('.raining-card').forEach(el => el.remove());
       document.querySelectorAll('.opponent-box').forEach(box => box.classList.remove('highlight-mistake'));
     };
@@ -595,12 +585,16 @@
       document.getElementById('shuriken-cancel-overlay').classList.remove('hidden');
     });
 
+    /* 수리검 발동 성공 시: undefined 에러 수정 완료 */
     socket.on('shuriken_success_trigger', (discardedCards) => {
       document.getElementById('vote-overlay').style.setProperty('display', 'none', 'important');
       const area = document.getElementById('shuriken-cards-area');
       area.innerHTML = '';
-      discardedCards.forEach(num => {
-        area.innerHTML += `<div class="shuriken-card">${num}</div>`;
+      
+      discardedCards.forEach(item => {
+        // [디버깅] 오브젝트 형태로 데이터가 올 경우와 일반 숫자로 올 경우 둘 다 안전하게 값 추출
+        const cardValue = typeof item === 'object' ? item.val : item;
+        area.innerHTML += `<div class="shuriken-card">${cardValue}</div>`;
       });
       document.getElementById('shuriken-success-overlay').classList.remove('hidden');
     });
@@ -622,6 +616,7 @@
       }
     }
 
+    /* 게임 상태 업데이트: 수리검 카드 박제 및 UI 갱신 버그 완벽 수정 */
     socket.on('update_game_state', (data) => {
       document.getElementById('focus-overlay').classList.add('hidden');
       document.getElementById('game-room-panel').classList.add('hidden');
@@ -629,19 +624,35 @@
 
       const opponentsArea = document.getElementById('opponents-area');
       opponentsArea.innerHTML = '';
+      
       data.allPlayers.forEach(p => {
         const isMe = p.id === myId ? 'me' : '';
         const nameText = p.id === myId ? `${p.name} (나)` : p.name;
+        
+        // 1. 수리검으로 폐기된 카드 템플릿 생성 (프로필 아래 고정 박제)
+        let shurikenCardsHtml = '';
+        if (p.shurikenCards && p.shurikenCards.length > 0) {
+          shurikenCardsHtml = `
+            <div class="discarded-shuriken-container" style="margin-top: 8px; display: flex; gap: 4px; justify-content: center; flex-wrap: wrap;">
+              ${p.shurikenCards.map(c => {
+                const num = typeof c === 'object' ? c.val : c;
+                return `<span class="shuriken-mini-card" style="background: linear-gradient(135deg, #2f3640, #1e222b); color: #ffd700; border: 1.5px solid #ffd700; border-radius: 4px; padding: 2px 6px; font-size: 0.75em; font-weight: bold; box-shadow: 0 2px 4px rgba(0,0,0,0.3); animation: pop-in 0.3s ease;">⭐ ${num}</span>`;
+              }).join('')}
+            </div>
+          `;
+        }
+
+        // 2. 그려지는 자리에 수리검 카드 HTML 영역 추가
         opponentsArea.innerHTML += `
           <div class="opponent-box ${isMe}" id="player-${p.id}">
             <div style="font-size: 1.5em;">🧑</div>
             <div style="font-weight: bold; margin-bottom: 3px; text-overflow: ellipsis; overflow: hidden; white-space: nowrap;">${nameText}</div>
             <div style="color: #6c63ff; font-size: 0.85em;">카드: ${p.cardCount}장</div>
+            ${shurikenCardsHtml}
           </div>
         `;
       });
 
-      // 백엔드 갱신 정보를 캐싱 (누락 카드 추적용)
       allPlayersCache = data.allPlayers;
 
       document.getElementById('level-display').innerText = data.level;
@@ -662,7 +673,10 @@
           
           const cardEl = document.createElement('div');
           cardEl.className = className;
-          cardEl.innerText = card.val;
+          
+          // [디버깅] playedCards 출력 시 undefined 방어
+          cardEl.innerText = typeof card === 'object' ? card.val : card;
+          
           cardEl.style.zIndex = idx + 1;
           cardEl.style.setProperty('--rand-rot', `${rot}deg`);
           cardEl.style.setProperty('--rand-x', `${x}px`);
