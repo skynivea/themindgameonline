@@ -19,13 +19,20 @@
     }
 
     /* 성급하게 먼저 내서 지목당한 플레이어 하이라이트 효과 */
-    .highlight-mistake { 
-      animation: targetPulse 0.6s infinite alternate; 
-      border-color: #ff4757 !important; 
-      box-shadow: 0 0 25px #ff4757 !important;
-      transform: scale(1.1) translateY(-5px);
-      z-index: 10;
-    }
+   /* ❌ 기존 .highlight-mistake를 아래 스타일로 덮어쓰기 하세요 */
+.highlight-mistake { 
+  animation: targetPulse 0.6s infinite alternate; 
+  border-color: #ff4757 !important; 
+  box-shadow: 0 0 25px #ff4757 !important;
+  z-index: 999 !important; /* 다른 어떤 카드나 레이어보다 위에 오도록 조절 */
+  pointer-events: none;
+}
+
+/* ❌ 기존 .table-area에 쌓이는 stacked-card가 혹시 주범 카드를 가리지 않도록 고정 */
+.table-area {
+  /* ... 기존 속성 그대로 ... */
+  overflow: visible !important; /* 카드가 우측 밖으로 튀어나와도 잘리지 않게 필수 */
+}
     @keyframes targetPulse {
       0% { border-color: #ff4757; }
       100% { border-color: #ffd700; }
@@ -454,10 +461,12 @@
     }
 
 /* 오름차순 실패 시: 완벽한 개연성 중심 릴레이 애니메이션 */
-    socket.on('mistake_animation', (data) => {
-      isPlayLocked = true;
-      document.getElementById('my-hand').classList.add('disabled-hand');
-      document.body.classList.add('flash-bg');
+// ❌ 기존 코드: mistake_animation에서 단순 alert만 띄웠던 부분을 타임라인 함수 호출로 변경
+socket.on('mistake_animation', (data) => {
+    // 서버가 전달한 '범인 카드'와 '폐기되어야 할 하위 카드 목록'을 기반으로 시각 연출 실행
+    // 데이터 포맷 예시: data.wrongCard (37), data.discardedCards ([16, 19, 21])
+    runMistakeTimeline(data.wrongCard, data.discardedCards, data.wrongPlayerId);
+});
 
       const mistakeSequence = data.sequence || [];
       let skippedList = [];
@@ -644,7 +653,63 @@
       document.getElementById('vote-buttons').classList.remove('hidden');
       document.getElementById('vote-waiting-text').classList.add('hidden');
     });
+function runMistakeTimeline(wrongCard, discardedCards, wrongPlayerId) {
+    // 0. 즉시 전 유저의 손패 영역을 클릭하지 못하도록 임시 잠금
+    document.getElementById('my-hand').classList.add('disabled-hand');
 
+    // --- [조건 1] 주범 카드를 우측에 독립된 레이어로 띄우기 ---
+    const tableArea = document.getElementById('table-area');
+    
+    const wrongCardEl = document.createElement('div');
+    wrongCardEl.className = 'card mistake highlight-mistake';
+    wrongCardEl.innerText = wrongCard;
+    wrongCardEl.style.position = 'absolute';
+    wrongCardEl.style.right = '20px'; // 우측에 배치
+    wrongCardEl.style.top = '50%';
+    wrongCardEl.style.transform = 'translateY(-50%) scale(1.1)';
+    wrongCardEl.style.zIndex = '999'; // 레이어 최상단 보장
+    tableArea.appendChild(wrongCardEl);
+
+    let timelineDelay = 600; // 첫 번째 카드가 떨어질 대기 시간 (ms)
+
+    // --- [조건 2] 37보다 작은 카드들이 오름차순으로 순차 탈주 ---
+    // 데이터는 백엔드에서 이미 오름차순[16, 19, 21]으로 정렬해서 보내줍니다.
+    discardedCards.forEach((cardVal, index) => {
+        setTimeout(() => {
+            // 형님이 만들어 두신 .raining-card 효과를 발동
+            // 각 플레이어 프로필 엘리먼트의 위치를 계산해 위치(fixed)를 잡고 
+            // table-area의 중심으로 스르륵 굴러떨어지는 CSS transition 발동
+            animateCardFromPlayerToTable(cardVal); 
+        }, timelineDelay);
+        
+        timelineDelay += 500; // 각 카드 간 0.5초의 시차를 두고 툭.. 툭.. 툭.. 떨어짐
+    });
+
+    // --- [조건 3] 하위 카드가 다 떨어지면 우측의 주범 카드가 더미 맨 위를 덮음 ---
+    setTimeout(() => {
+        // 우측에 대기하던 주범 카드를 테이블 센터(더미 맨 위)로 이동시키는 애니메이션
+        wrongCardEl.style.transition = 'all 0.5s cubic-bezier(0.175, 0.885, 0.32, 1.275)';
+        wrongCardEl.style.right = 'auto';
+        wrongCardEl.style.left = '50%';
+        wrongCardEl.style.top = '50%';
+        wrongCardEl.style.transform = 'translate(-50%, -50%) rotate(0deg) scale(1)';
+        
+        // 애니메이션이 완전히 끝난 후 최종 정리
+        setTimeout(() => {
+            // 실패 레이어 해제 및 최종 테이블 상태 새로고침
+            wrongCardEl.remove();
+            document.getElementById('my-hand').classList.remove('disabled-hand');
+            
+            // 기존에 가지고 계신 커스텀 실패 오버레이 알림창을 이때 오픈!
+            const mistakeOverlay = document.getElementById('mistake-overlay');
+            if(mistakeOverlay) {
+                document.getElementById('failed-card-display').innerText = wrongCard;
+                mistakeOverlay.classList.remove('hidden');
+            }
+        }, 600);
+
+    }, timelineDelay + 200);
+}
     function castVote(choice) {
       socket.emit('vote_shuriken', { roomCode: currentRoomCode, vote: choice });
       document.getElementById('vote-buttons').classList.add('hidden');
