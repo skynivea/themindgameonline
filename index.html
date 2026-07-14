@@ -23,30 +23,15 @@
       animation: targetPulse 0.6s infinite alternate; 
       border-color: #ff4757 !important; 
       box-shadow: 0 0 25px #ff4757 !important;
-      z-index: 999 !important;
-      pointer-events: none;
+      transform: scale(1.1) translateY(-5px);
+      z-index: 10;
     }
-
-    .table-area {
-      height: 180px; 
-      background-color: rgba(0,0,0,0.4); 
-      border-radius: 15px; 
-      display: flex; 
-      justify-content: center; 
-      align-items: center; 
-      margin-bottom: 15px; 
-      border: 2px dashed rgba(255,255,255,0.15); 
-      position: relative; 
-      padding: 10px; 
-      overflow: visible !important; /* 카드가 우측 밖으로 튀어나와도 잘리지 않게 필수 */
-    }
-    
     @keyframes targetPulse {
       0% { border-color: #ff4757; }
       100% { border-color: #ffd700; }
     }
 
-    .panel { background-color: #212135; padding: 30px 20px; border-radius: 20px; text-align: center; width: 90%; max-width: 400px; box-shadow: 0 10px 30px rgba(0,0,0,0.5); z-index: 5; box-sizing: border-box; }
+    .panel { background-color: #212135; padding: 30px 20px; border-radius: 20px; text-align: center; width: 90%; max-width: 400px; box-shadow: 0 10px 30px rgba(0,0,0,0.5); z-index: 1; box-sizing: border-box; }
     .game-board { width: 100%; max-width: 600px; position: relative; transition: transform 0.1s; background-color: transparent; box-shadow: none; padding: 10px; }
     
     .lobby-menu-btns { display: flex; gap: 15px; margin-bottom: 20px; justify-content: center; }
@@ -66,6 +51,7 @@
     .status-bar { display: flex; justify-content: space-around; background-color: #2d2d44; padding: 12px; border-radius: 10px; margin-bottom: 15px; font-size: 0.95em; font-weight: bold; align-items: center; gap: 5px; }
     .status-bar button { padding: 6px 10px; font-size: 0.8em; margin: 0; }
     
+    .table-area { height: 180px; background-color: rgba(0,0,0,0.4); border-radius: 15px; display: flex; justify-content: center; align-items: center; margin-bottom: 15px; border: 2px dashed rgba(255,255,255,0.15); position: relative; padding: 10px; overflow: visible; }
     .hand-area { display: flex; justify-content: center; gap: 8px; min-height: 90px; flex-wrap: wrap; max-height: 190px; overflow-y: auto; padding: 5px; }
     
     .disabled-hand { pointer-events: none !important; opacity: 0.6; }
@@ -128,7 +114,7 @@
 
     /* 모달 알림창 디자인 최적화 */
     .modal-content { background-color: #212135; padding: 25px 20px; border-radius: 20px; width: 90%; max-width: 360px; box-sizing: border-box; text-align: center; }
-    /* 프로필 밑에 붙는 미니 카드 스타일 */
+    /* 프로필 밑에 붙는 미니 카드 스타일 (원래 카드의 딱 절반 크기 & 가독성 강화) */
     .shuriken-mini-card {
       display: inline-flex;
       align-items: center;
@@ -137,17 +123,21 @@
       color: #ffd700 !important;
       border: 2px solid #ffd700 !important;
       border-radius: 6px;
+      
+      /* 원래 카드의 절반 크기 (가로 26px, 세로 39px) 및 뚜렷한 가독성 */
       width: 26px;
       height: 39px;
       font-size: 1.05rem;
       font-weight: 900;
       text-shadow: 1px 1px 2px rgba(0,0,0,0.8);
       box-shadow: 0 3px 6px rgba(0,0,0,0.5);
+      
       position: relative;
       margin: 2px;
       animation: pop-in 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275);
     }
 
+    /* 미니 카드 우측 상단에 노란색 미니 별(수리검 표식) 얹기 */
     .shuriken-mini-card::after {
       content: "★";
       position: absolute;
@@ -281,8 +271,8 @@
     <div class="click-notice">화면을 클릭하면 닫힙니다.</div>
   </div>
 
-  <!-- 수리검 투표창 모달 (기존의 강제 클래스 충돌 방지를 위해 class="overlay" 제거 및 hidden 기본 적용) -->
-  <div id="vote-overlay" class="hidden" style="position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.8); z-index: 150; display: flex; flex-direction: column; justify-content: center; align-items: center; text-align: center; padding: 20px; box-sizing: border-box;">
+  <!-- 수리검 투표창 모달 -->
+  <div id="vote-overlay" class="overlay" style="display: none !important;">
     <div class="modal-content" onclick="event.stopPropagation()">
       <h3 style="margin-top: 0; font-size: 1.35rem;">⭐ 수리검 사용 투표</h3>
       <p style="font-size: 0.95rem; color: #ccc;">모든 플레이어가 찬성해야 발동됩니다.</p>
@@ -464,199 +454,197 @@
     }
 
 /* 오름차순 실패 시: 완벽한 개연성 중심 릴레이 애니메이션 */
-socket.on('mistake_animation', (data) => {
-    // 1. 즉시 전 유저의 손패 영역을 클릭하지 못하도록 임시 잠금
-    isPlayLocked = true;
-    document.getElementById('my-hand').classList.add('disabled-hand');
-    document.getElementById('game-body').classList.add('flash-bg');
+    socket.on('mistake_animation', (data) => {
+      isPlayLocked = true;
+      document.getElementById('my-hand').classList.add('disabled-hand');
+      document.body.classList.add('flash-bg');
 
-    // 2. 서버 데이터 파싱 (우선순위: 타임라인 데이터 -> 구버전 시퀀스 데이터)
-    const wrongCard = data.wrongCard || data.lowestCard || 0;
-    const discardedCards = data.discardedCards || (data.sequence ? data.sequence.map(i => typeof i === 'object' ? i.val : i) : []);
-    const wrongPlayerId = data.wrongPlayerId || data.playerId || myId;
+      const mistakeSequence = data.sequence || [];
+      let skippedList = [];
+      
+      if (mistakeSequence.length > 0) {
+        skippedList = mistakeSequence.map(item => ({
+          val: typeof item === 'object' ? item.val : item,
+          playerId: item.playerId || myId,
+          isTriggerCard: item.isTriggerCard || false // 실수로 직접 낸 카드(예: 17)인지 여부
+        }));
+      } else {
+        const fallbackVal = data.lowestCard || 0;
+        skippedList.push({ val: fallbackVal, playerId: data.lowestCardPlayerId || myId, isTriggerCard: false });
+      }
 
-    // 3. 타임라인 애니메이션 함수 실행
-    runMistakeTimeline(wrongCard, discardedCards, wrongPlayerId, data.message);
-});
+      // 오름차순 정렬
+      skippedList.sort((a, b) => a.val - b.val);
 
-/* 타임라인 연출 메인 함수 */
-function runMistakeTimeline(wrongCard, discardedCards, wrongPlayerId, serverMessage) {
-    const tableArea = document.getElementById('table-area');
-    if (!tableArea) return;
-
-    // --- [조건 1] 주범 카드를 우측에 독립된 레이어로 띄우기 ---
-    const wrongCardEl = document.createElement('div');
-    wrongCardEl.className = 'card mistake highlight-mistake';
-    wrongCardEl.innerText = wrongCard;
-    wrongCardEl.style.position = 'absolute';
-    wrongCardEl.style.right = '20px'; // 테이블 영역 내부 우측에 배치
-    wrongCardEl.style.top = '50%';
-    wrongCardEl.style.transform = 'translateY(-50%) scale(1.1)';
-    wrongCardEl.style.zIndex = '999'; // 레이어 최상단 보장
-    tableArea.appendChild(wrongCardEl);
-
-    // 하이라이트 표시
-    document.querySelectorAll('.opponent-box').forEach(box => {
-        // 주범 플레이어 박스 강조 효과 부여 구문
-        if (box.getAttribute('data-id') === wrongPlayerId) {
-            box.classList.add('highlight-mistake');
-        }
-    });
-
-    let timelineDelay = 600; // 첫 번째 카드가 떨어질 대기 시간
-
-    // --- [조건 2] 주범보다 작은 카드들이 오름차순으로 순차 탈주 ---
-    // 오름차순 보장 정렬
-    const sortedDiscards = [...discardedCards].sort((a, b) => a - b);
-
-    sortedDiscards.forEach((cardVal, index) => {
-        setTimeout(() => {
-            // 형님이 기존에 만들어두신 플레이어 탈주 카드 연출 호출
-            if (typeof animateCardFromPlayerToTable === 'function') {
-                animateCardFromPlayerToTable(cardVal);
-            } else if (typeof dropCardFromPlayer === 'function') {
-                dropCardFromPlayer(wrongPlayerId, cardVal, 0, 100 + index);
-            } else {
-                // 대체제: 테이블 중앙에 일반 누락 카드 드랍 효과
-                const fallbackCard = document.createElement('div');
-                fallbackCard.className = 'card stacked-card';
-                fallbackCard.innerText = cardVal;
-                fallbackCard.style.setProperty('--rand-rot', `${Math.random() * 20 - 10}deg`);
-                fallbackCard.style.setProperty('--rand-x', `${Math.random() * 30 - 15}px`);
-                fallbackCard.style.setProperty('--rand-y', `${Math.random() * 30 - 15}px`);
-                tableArea.appendChild(fallbackCard);
-            }
-        }, timelineDelay);
+      // 릴레이 연출 작동
+      skippedList.forEach((cardInfo, idx) => {
+        const isTrigger = cardInfo.isTriggerCard || (cardInfo.val === data.lowestCard && cardInfo.playerId === (data.playerId || myId));
         
-        timelineDelay += 500; // 0.5초 시차 릴레이
-    });
+        if (isTrigger) {
+          // [개연성 패치 1] 내가 이미 낸 카드(17)는 내 몸에서 날아가지 않습니다.
+          // 대신 테이블 바로 옆(우측 대기 구역)에 가만히 생성해 두었다가, 
+          // 상대방 카드들(10, 11)이 먼저 날아와 꽂힌 후 마지막 차례에 스르륵 중앙으로 합쳐집니다!
+          setTimeout(() => {
+            const tableArea = document.getElementById('table-area');
+            if (!tableArea) return;
 
-    // --- [조건 3] 하위 카드가 다 떨어지면 우측의 주범 카드가 센터를 덮음 ---
-    setTimeout(() => {
-        wrongCardEl.style.transition = 'all 0.5s cubic-bezier(0.175, 0.885, 0.32, 1.275)';
-        wrongCardEl.style.right = 'auto';
-        wrongCardEl.style.left = '50%';
-        wrongCardEl.style.top = '50%';
-        wrongCardEl.style.transform = 'translate(-50%, -50%) rotate(0deg) scale(1)';
-        
-        // 애니메이션이 끝나고 최종 팝업 오픈
-        setTimeout(() => {
-            wrongCardEl.remove();
+            const rainCard = document.createElement('div');
+            rainCard.className = 'card raining-card mistake-trigger';
+            rainCard.innerText = cardInfo.val;
+            rainCard.style.zIndex = 100 + idx;
             
-            const mistakeOverlay = document.getElementById('mistake-overlay');
-            if (mistakeOverlay) {
-                document.getElementById('failed-card-display').innerText = wrongCard;
-                document.getElementById('mistake-player-announce').innerText = serverMessage || `오름차순 순서가 꼬였습니다! 먼저 낸 카드가 존재합니다.`;
-                mistakeOverlay.classList.remove('hidden');
-            }
-        }, 600);
+            const tableRect = tableArea.getBoundingClientRect();
+            // 처음엔 테이블 우측 대기 구역에 소환
+            const waitX = tableRect.left + tableRect.width + 10;
+            const waitY = tableRect.top + tableRect.height / 2 - 39;
+            
+            rainCard.style.left = `${waitX}px`;
+            rainCard.style.top = `${waitY}px`;
+            rainCard.style.transform = 'scale(1) rotate(15deg)';
+            rainCard.style.opacity = '0.7'; // 실수 대기 카드임을 시각화
+            rainCard.style.border = '2px dashed #ff4757'; // 빨간 점선 테두리
 
-    }, timelineDelay + 200);
-}
+            document.body.appendChild(rainCard);
 
-/* 실패 오버레이 닫기 클릭 바인딩 */
-document.getElementById('mistake-overlay').onclick = function() {
-    document.body.classList.remove('flash-bg');
-    this.classList.add('hidden');
-    isPlayLocked = false;
-    document.getElementById('my-hand').classList.remove('disabled-hand');
-    
-    // 테이블에 임시 생성된 찌꺼기 카드 엘리먼트들 일괄 청소
-    document.querySelectorAll('.raining-card').forEach(el => el.remove());
-    document.querySelectorAll('.opponent-box').forEach(box => box.classList.remove('highlight-mistake'));
-};
+            // 잠시 후 중앙으로 스르륵 합쳐지는 애니메이션
+            setTimeout(() => {
+              const destX = tableRect.left + tableRect.width / 2 + (Math.random() * 40 - 20);
+              const destY = tableRect.top + tableRect.height / 2 + (Math.random() * 30 - 15);
+              const rot = (Math.random() * 20) - 10;
+              
+              rainCard.style.left = `${destX - 26}px`;
+              rainCard.style.top = `${destY - 39}px`;
+              rainCard.style.transform = `scale(1) rotate(${rot}deg)`;
+              rainCard.style.opacity = '1';
+              rainCard.style.border = ''; // 일반 카드로 복구
+            }, 800);
 
-/* 레벨 클리어 트리거 */
-socket.on('level_clear_trigger', (data) => {
-    document.getElementById('clear-subtitle').innerText = `레벨 ${data.cleared}을 완벽하게 클리어했습니다!`;
-    let reward = "";
-    if (data.cleared === 2) reward = "🎁 보상 달성: 수리검 +1";
-    if (data.cleared === 3) reward = "🎁 보상 달성: 목숨 +1";
-    if (data.cleared === 5) reward = "🎁 보상 달성: 수리검 +1";
-    if (data.cleared === 6) reward = "🎁 보상 달성: 목숨 +1";
-    if (data.cleared === 8) reward = "🎁 보상 달성: 수리검 +1";
-    if (data.cleared === 9) reward = "🎁 보상 달성: 목숨 +1";
-    document.getElementById('reward-text').innerText = reward;
-    
-    document.getElementById('clear-click-notice').innerText = "화면을 클릭하면 다음 레벨 대기실로 이동합니다 (모든 인원 동의 필요)";
-    document.getElementById('clear-overlay').classList.remove('hidden');
-});
+          }, idx * 600);
+        } else {
+          // [개연성 패치 2] 꼬여버린 타인의 누락 카드(10, 11)만 정상적으로 프로필에서 뿜어져 나옵니다.
+          dropCardFromPlayer(cardInfo.playerId, cardInfo.val, idx * 600, 100 + idx);
+        }
+      });
 
-function closeClearOverlay() {
-    document.getElementById('clear-overlay').classList.add('hidden');
-    socket.emit('next_level_ready', currentRoomCode);
-}
+      // 오버레이창 알림 띄우기
+      const totalDelay = skippedList.length * 600 + 1200; // 대기 카드 합쳐지는 속도 고려하여 딜레이 살짝 증가
+      setTimeout(() => {
+        document.querySelectorAll('.opponent-box').forEach(box => box.classList.remove('highlight-mistake'));
 
-/* 정신집중 페이즈 진입 */
-socket.on('trigger_focus_phase', (data) => {
-    document.getElementById('game-room-panel').classList.add('hidden');
-    document.getElementById('game-board-panel').classList.add('hidden');
-    
-    allPlayersCache = data.allPlayers;
-    
-    document.getElementById('focus-level-title').innerText = `LEVEL ${data.level}`;
-    document.getElementById('focus-status-msg').innerText = "모두 손을 카드로 모으고 꾸욱 누르세요! (0 / " + allPlayersCache.length + ")";
-    document.getElementById('focus-status-msg').style.color = "#6c63ff";
-    
-    const pContainer = document.getElementById('focus-players-container');
-    pContainer.innerHTML = '';
-    allPlayersCache.forEach(p => {
-        pContainer.innerHTML += `<div class="focus-player-slot" id="focus-p-${p.id}">🧑 ${p.name}</div>`;
+        const overlay = document.getElementById('mistake-overlay');
+        const displayCardNum = skippedList[0] ? skippedList[0].val : (data.lowestCard || "❓");
+        document.getElementById('failed-card-display').innerText = displayCardNum;
+        
+        if (data.message) {
+          document.getElementById('mistake-player-announce').innerText = data.message;
+        } else {
+          document.getElementById('mistake-player-announce').innerText = `오름차순 순서가 꼬였습니다! 먼저 낸 카드가 존재합니다.`;
+        }
+        overlay.classList.remove('hidden');
+      }, totalDelay);
     });
-    
-    document.getElementById('focus-overlay').classList.remove('hidden');
-});
 
-const focusZone = document.getElementById('focus-click-zone');
-const onFocusStart = (e) => { e.preventDefault(); socket.emit('focus_hand_down', currentRoomCode); };
-const onFocusEnd = (e) => { socket.emit('focus_hand_up', currentRoomCode); };
+    document.getElementById('mistake-overlay').onclick = function() {
+      document.body.classList.remove('flash-bg');
+      this.classList.add('hidden');
+      isPlayLocked = false;
+      document.getElementById('my-hand').classList.remove('disabled-hand');
+      
+      document.querySelectorAll('.raining-card').forEach(el => el.remove());
+      document.querySelectorAll('.opponent-box').forEach(box => box.classList.remove('highlight-mistake'));
+    };
 
-focusZone.addEventListener('mousedown', onFocusStart);
-focusZone.addEventListener('mouseup', onFocusEnd);
-focusZone.addEventListener('mouseleave', onFocusEnd);
-focusZone.addEventListener('touchstart', onFocusStart, {passive: false});
-focusZone.addEventListener('touchend', onFocusEnd);
-focusZone.addEventListener('touchcancel', onFocusEnd);
+    socket.on('level_clear_trigger', (data) => {
+      document.getElementById('clear-subtitle').innerText = `레벨 ${data.cleared}을 완벽하게 클리어했습니다!`;
+      let reward = "";
+      if (data.cleared === 2) reward = "🎁 보상 달성: 수리검 +1";
+      if (data.cleared === 3) reward = "🎁 보상 달성: 목숨 +1";
+      if (data.cleared === 5) reward = "🎁 보상 달성: 수리검 +1";
+      if (data.cleared === 6) reward = "🎁 보상 달성: 목숨 +1";
+      if (data.cleared === 8) reward = "🎁 보상 달성: 수리검 +1";
+      if (data.cleared === 9) reward = "🎁 보상 달성: 목숨 +1";
+      document.getElementById('reward-text').innerText = reward;
+      
+      document.getElementById('clear-click-notice').innerText = "화면을 클릭하면 다음 레벨 대기실로 이동합니다 (모든 인원 동의 필요)";
+      document.getElementById('clear-overlay').classList.remove('hidden');
+    });
 
-socket.on('update_focus_status', (focusPlayerIds) => {
-    allPlayersCache.forEach(p => {
+    function closeClearOverlay() {
+      document.getElementById('clear-overlay').classList.add('hidden');
+      socket.emit('next_level_ready', currentRoomCode);
+    }
+
+    /* 정신집중 페이즈 진입 */
+    socket.on('trigger_focus_phase', (data) => {
+      document.getElementById('game-room-panel').classList.add('hidden');
+      document.getElementById('game-board-panel').classList.add('hidden');
+      
+      allPlayersCache = data.allPlayers;
+      
+      document.getElementById('focus-level-title').innerText = `LEVEL ${data.level}`;
+      document.getElementById('focus-status-msg').innerText = "모두 손을 카드로 모으고 꾸욱 누르세요! (0 / " + allPlayersCache.length + ")";
+      document.getElementById('focus-status-msg').style.color = "#6c63ff";
+      
+      const pContainer = document.getElementById('focus-players-container');
+      pContainer.innerHTML = '';
+      allPlayersCache.forEach(p => {
+        pContainer.innerHTML += `<div class="focus-player-slot" id="focus-p-${p.id}">🧑 ${p.name}</div>`;
+      });
+      
+      document.getElementById('focus-overlay').classList.remove('hidden');
+    });
+
+    const focusZone = document.getElementById('focus-click-zone');
+    const onFocusStart = (e) => { e.preventDefault(); socket.emit('focus_hand_down', currentRoomCode); };
+    const onFocusEnd = (e) => { socket.emit('focus_hand_up', currentRoomCode); };
+
+    focusZone.addEventListener('mousedown', onFocusStart);
+    focusZone.addEventListener('mouseup', onFocusEnd);
+    focusZone.addEventListener('mouseleave', onFocusEnd);
+    focusZone.addEventListener('touchstart', onFocusStart, {passive: false});
+    focusZone.addEventListener('touchend', onFocusEnd);
+    focusZone.addEventListener('touchcancel', onFocusEnd);
+
+    socket.on('update_focus_status', (focusPlayerIds) => {
+      allPlayersCache.forEach(p => {
         const slot = document.getElementById(`focus-p-${p.id}`);
         if(slot) {
-            if (focusPlayerIds.includes(p.id)) {
-                slot.classList.add('active');
-                slot.innerText = `✋ ${p.name}`;
-            } else {
-                slot.classList.remove('active');
-                slot.innerText = `🧑 ${p.name}`;
-            }
+          if (focusPlayerIds.includes(p.id)) {
+            slot.classList.add('active');
+            slot.innerText = `✋ ${p.name}`;
+          } else {
+            slot.classList.remove('active');
+            slot.innerText = `🧑 ${p.name}`;
+          }
         }
+      });
+      document.getElementById('focus-status-msg').innerText = "모두 손을 카드로 모으고 꾸욱 누르세요! (" + focusPlayerIds.length + " / " + allPlayersCache.length + ")";
     });
-    document.getElementById('focus-status-msg').innerText = "모두 손을 카드로 모으고 꾸욱 누르세요! (" + focusPlayerIds.length + " / " + allPlayersCache.length + ")";
-});
 
-socket.on('focus_success_countdown', () => {
-    document.getElementById('focus-status-msg').innerText = "⚡ 텔레파시 연결 중... 2초간 떼지 마세요! ⚡";
-    document.getElementById('focus-status-msg').style.color = "#ffd700";
-    
-    setTimeout(() => {
+    socket.on('focus_success_countdown', () => {
+      document.getElementById('focus-status-msg').innerText = "⚡ 텔레파시 연결 중... 2초간 떼지 마세요! ⚡";
+      document.getElementById('focus-status-msg').style.color = "#ffd700";
+      
+      setTimeout(() => {
         const msgEl = document.getElementById('focus-status-msg');
         if(msgEl && msgEl.innerText.includes("연결 중")) {
-            msgEl.innerText = "✨ 정신 집중 완료! 게임을 시작합니다! ✨";
-            msgEl.style.color = "#4cd137";
+          msgEl.innerText = "✨ 정신 집중 완료! 게임을 시작합니다! ✨";
+          msgEl.style.color = "#4cd137";
         }
-    }, 1000);
-});
+      }, 1000);
+    });
 
-function proposeShuriken() { socket.emit('propose_shuriken', currentRoomCode); }
+    function proposeShuriken() { socket.emit('propose_shuriken', currentRoomCode); }
 
-socket.on('start_shuriken_vote', (data) => {
-    const v = document.getElementById('vote-overlay');
-    v.style.setProperty('display', 'flex', 'important');
-    document.getElementById('vote-yes-count').innerText = 0;
-    document.getElementById('vote-no-count').innerText = 0;
-    document.getElementById('vote-buttons').classList.remove('hidden');
-    document.getElementById('vote-waiting-text').classList.add('hidden');
-});
+    socket.on('start_shuriken_vote', (data) => {
+      const v = document.getElementById('vote-overlay');
+      v.style.setProperty('display', 'flex', 'important');
+      document.getElementById('vote-yes-count').innerText = 0;
+      document.getElementById('vote-no-count').innerText = 0;
+      document.getElementById('vote-buttons').classList.remove('hidden');
+      document.getElementById('vote-waiting-text').classList.add('hidden');
+    });
+
     function castVote(choice) {
       socket.emit('vote_shuriken', { roomCode: currentRoomCode, vote: choice });
       document.getElementById('vote-buttons').classList.add('hidden');
