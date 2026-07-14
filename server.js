@@ -7,10 +7,14 @@ const io = new Server(server);
 
 const rooms = {};
 
+// 💻 [수정본] 올바르게 작동하는 카드 섞기(셔플) 함수
 function shuffle(array) {
   for (let i = array.length - 1; i > 0; i--) {
     const j = Math.floor(Math.random() * (i + 1));
-    [array[j], array[i]] = [array[j], array[i]];
+    // 이 부분의 세미콜론(;) 누락과 문법을 확실하게 수정했습니다.
+    let temp = array[i];
+    array[i] = array[j];
+    array[j] = temp;
   }
 }
 
