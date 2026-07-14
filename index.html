@@ -2,53 +2,45 @@
 <html lang="ko">
 <head>
     <meta charset="UTF-8">
-    <!-- ⚠️ 모바일에서 화면이 마음대로 확대/축소되지 않게 꽉 잡아주는 핵심 메타 태그 -->
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>The Mind - 모바일 최적화</title>
+    <title>The Mind Online</title>
     <style>
-        /* 🎨 기본 다크모드 테마 및 모바일 터치 방지 설정 */
         * {
             box-sizing: border-box;
             margin: 0;
             padding: 0;
-            user-select: none; /* 모바일에서 꾹 눌렀을 때 텍스트 선택 방지 */
+            user-select: none;
             -webkit-user-select: none;
-            -webkit-tap-highlight-color: transparent; /* 터치 시 파란 박스 제거 */
+            -webkit-tap-highlight-color: transparent;
         }
-
         body {
             background-color: #121214;
             color: #e1e1e6;
-            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            font-family: -apple-system, BlinkMacSystemFont, sans-serif;
             display: flex;
             flex-direction: column;
             align-items: center;
-            justify-content: center;
+            justify-content: flex-start;
             min-height: 100vh;
-            overflow-x: hidden;
+            padding: 15px;
         }
-
-        /* 📦 전체 메인 컨테이너 (모바일 가로폭 100% 대응) */
         .container {
             width: 100%;
-            max-width: 500px; /* PC로 볼 때도 너무 퍼지지 않게 폰 사이즈로 고정 */
-            padding: 20px;
+            max-width: 480px;
             display: flex;
             flex-direction: column;
             gap: 15px;
         }
-
-        /* 🏠 1. 로그인 / 방 생성 대기 화면 */
         .screen {
             background: #1e1e22;
             border-radius: 16px;
-            padding: 24px;
+            padding: 20px;
             box-shadow: 0 8px 24px rgba(0,0,0,0.4);
             display: flex;
             flex-direction: column;
-            gap: 16px;
+            gap: 12px;
         }
-
+        h2 { text-align: center; color: #a67cff; margin-bottom: 10px; }
         input, button {
             width: 100%;
             padding: 14px;
@@ -57,51 +49,31 @@
             font-size: 16px;
             font-weight: bold;
         }
-
-        input {
-            background: #2a2a30;
-            color: #fff;
-        }
-
-        button {
-            background: #6200ee;
-            color: #fff;
-            cursor: pointer;
-            transition: background 0.2s;
-        }
-
-        button:active {
-            background: #3700b3; /* 모바일 터치 피드백 */
-        }
-
-        /* 📊 2. 상단 게임 정보 대시보드 (목숨, 수리검, 레벨) */
+        input { background: #2a2a30; color: #fff; text-align: center; }
+        button { background: #6200ee; color: #fff; cursor: pointer; transition: background 0.1s; }
+        button:active { background: #3700b3; }
+        
+        /* 인게임 레이아웃 */
         .status-bar {
             display: grid;
             grid-template-columns: repeat(3, 1fr);
-            gap: 10px;
+            gap: 8px;
             text-align: center;
         }
-
         .status-card {
             background: #1e1e22;
-            padding: 10px;
-            border-radius: 12px;
-            font-size: 14px;
+            padding: 8px;
+            border-radius: 10px;
+            font-size: 12px;
             border: 1px solid #2a2a30;
         }
-
-        .status-card span {
-            display: block;
-            font-size: 18px;
-            margin-top: 4px;
-        }
-
-        /* 🃏 3. 바닥에 깔린 카드 현황판 (Grid 정렬로 모바일에서도 이쁘게 정렬) */
+        .status-card span { display: block; font-size: 16px; margin-top: 4px; font-weight: bold; }
+        
         .table-area {
             background: #1a1a1e;
-            border: 2px dashed #333;
+            border: 2px dashed #444;
             border-radius: 16px;
-            min-height: 160px;
+            min-height: 140px;
             display: flex;
             flex-wrap: wrap;
             align-content: center;
@@ -109,99 +81,227 @@
             gap: 8px;
             padding: 15px;
         }
-
-        /* 🖐️ 4. 내 손패 (모바일 가로 스크롤 또는 유연한 배치) */
         .my-hand {
             display: flex;
             justify-content: center;
-            gap: 10px;
-            flex-wrap: wrap; /* 카드가 많아지면 모바일 화면 아래로 이쁘게 줄바꿈 */
+            gap: 8px;
+            flex-wrap: wrap;
             margin-top: 10px;
         }
-
-        /* 🎴 스마트폰 최적화 카드 디자인 */
         .card {
-            width: 65px;
-            height: 95px;
+            width: 60px;
+            height: 85px;
             background: linear-gradient(135deg, #3a3d40, #181719);
             border: 2px solid #a8a8b2;
-            border-radius: 10px;
+            border-radius: 8px;
             display: flex;
             align-items: center;
             justify-content: center;
-            font-size: 22px;
+            font-size: 20px;
             font-weight: 900;
             color: #fff;
-            box-shadow: 0 4px 10px rgba(0,0,0,0.3);
-            transform: translateY(0);
-            transition: transform 0.1s;
+            box-shadow: 0 4px 8px rgba(0,0,0,0.3);
         }
+        .card.mistake { border-color: #ff5555; background: #4a1d1d; }
+        .my-hand .card { cursor: pointer; }
+        .my-hand .card:active { transform: scale(0.9) translateY(-5px); }
 
-        .card:active {
-            transform: scale(0.95) translateY(-5px); /* 모바일에서 낼 때 쫀득한 손맛 효과 */
-        }
-
-        /* 🖐️ 5. 정신집중 패널 (꽉 찬 화면 대응) */
-        .focus-panel {
-            background: radial-gradient(circle, #2c1b4d 0%, #121214 100%);
-            border: 2px solid #6200ee;
-            border-radius: 16px;
-            padding: 30px;
-            text-align: center;
-        }
-
-        .focus-btn {
-            width: 120px;
-            height: 120px;
-            border-radius: 50%;
-            background: #6200ee;
-            box-shadow: 0 0 20px rgba(98, 0, 238, 0.6);
-            margin: 20px auto 0;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            font-size: 16px;
-        }
+        .player-list { font-size: 14px; background: #1a1a1e; padding: 10px; border-radius: 8px; }
+        .player-item { display: flex; justify-content: space-between; padding: 4px 0; }
+        
+        /* 정신집중 구역 */
+        .focus-area { text-align: center; padding: 20px; background: #251b3d; border-radius: 12px; border: 1px solid #6200ee; }
+        .focus-btn { background: #03dac6; color: #000; margin-top: 10px; }
     </style>
 </head>
 <body>
 
-    <div class="container">
-        <!-- 예시 화면용 아이디 배치 (기존 자바스크립트 ID에 맞춰 연결하세요) -->
-        <div id="lobby-screen" class="screen">
-            <h2 style="text-align: center; color: #6200ee;">THE MIND</h2>
-            <input type="text" id="nickname-input" placeholder="닉네임 입력 (최대 5자)" maxlength="5">
-            <button id="create-btn">방 만들기</button>
-            <input type="text" id="code-input" placeholder="방 코드 4자리 입력">
-            <button id="join-btn" style="background:#03dac6; color:#000;">방 입장하기</button>
-        </div>
-
-        <!-- 실제 인게임 레이아웃 화면 예시 -->
-        <div id="game-screen" style="display: none; flex-direction: column; gap: 15px;">
-            <!-- 상단 바 -->
-            <div class="status-bar">
-                <div class="status-card">LEVEL<span id="txt-level">1</span></div>
-                <div class="status-card">LIVES<span id="txt-lives">❤️ ❤️</span></div>
-                <div class="status-card">SHURIKEN<span id="txt-shurikens">🌟</span></div>
-            </div>
-
-            <!-- 카드 놓는 테이블 -->
-            <div class="table-area" id="table-cards">
-                <!-- 여기에 낸 카드들이 추가됨 -->
-            </div>
-
-            <!-- 내 카드 리스트 -->
-            <div class="my-hand" id="my-cards">
-                <!-- 여기에 .card가 스크립트로 꽂힘 -->
-            </div>
-        </div>
+<div class="container">
+    <!-- 로비 스크린 -->
+    <div id="lobby-screen" class="screen">
+        <h2>THE MIND</h2>
+        <input type="text" id="nickname-input" placeholder="닉네임 입력 (최대 5자)" maxlength="5">
+        <button id="create-btn">방 만들기</button>
+        <hr style="border: 0; height: 1px; background: #333; margin: 10px 0;">
+        <input type="text" id="code-input" placeholder="방 코드 4자리">
+        <button id="join-btn" style="background:#03dac6; color:#000;">방 입장하기</button>
     </div>
 
-    <!-- 🌐 여기에 기존 소켓 연결(io) 및 자바스크립트 코드를 그대로 붙여넣으시면 됩니다! -->
-    <script src="/socket.io/socket.io.js"></script>
-    <script>
-        const socket = io();
-        // ... (형님이 짜두신 기존 프론트엔드 자바스크립트 소스코드 여기에 입력)
-    </script>
+    <!-- 대기방 스크린 -->
+    <div id="room-screen" class="screen" style="display: none;">
+        <h2>방 코드: <span id="room-code-txt" style="color:#03dac6;">-</span></h2>
+        <div class="player-list" id="waiting-players"></div>
+        <button id="start-btn" style="display: none; background:#ffde03; color:#000;">게임 시작</button>
+        <p id="wait-msg" style="text-align:center; font-size:14px; color:#aaa;">방장이 시작하기를 기다리는 중...</p>
+    </div>
+
+    <!-- 인게임 스크린 -->
+    <div id="game-screen" style="display: none; flex-direction: column; gap: 12px;">
+        <div class="status-bar">
+            <div class="status-card">LEVEL<span id="txt-level">1</span></div>
+            <div class="status-card">LIVES<span id="txt-lives">❤️</span></div>
+            <div class="status-card">SHURIKEN<span id="txt-shurikens">🌟</span></div>
+        </div>
+
+        <div class="player-list" id="game-players"></div>
+
+        <!-- 정신집중 구역 -->
+        <div id="focus-zone" class="focus-area" style="display: none;">
+            <p id="focus-status-txt">정신을 집중하십시오...</p>
+            <button id="focus-btn" class="focus-btn">정신 집중 완료</button>
+        </div>
+
+        <div class="table-area" id="table-cards"></div>
+        
+        <div style="display:flex; gap:10px;">
+            <button id="shuriken-btn" style="background:#cf6679; flex:1; padding:10px; font-size:14px;">수리검 제안</button>
+            <button id="next-lvl-btn" style="background:#03dac6; color:#000; flex:1; padding:10px; font-size:14px; display:none;">다음 레벨 준비</button>
+        </div>
+
+        <div class="my-hand" id="my-cards"></div>
+    </div>
+</div>
+
+<script src="/socket.io/socket.io.js"></script>
+<script>
+    const socket = io();
+    let myRoomCode = "";
+
+    const lobbyScreen = document.getElementById('lobby-screen');
+    const roomScreen = document.getElementById('room-screen');
+    const gameScreen = document.getElementById('game-screen');
+
+    // 1. 방 생성 / 입장 이벤트 리스너 정의
+    document.getElementById('create-btn').onclick = () => {
+        const name = document.getElementById('nickname-input').value.trim();
+        if(!name) return alert('닉네임을 입력하세요!');
+        socket.emit('create_room', name);
+    };
+
+    document.getElementById('join-btn').onclick = () => {
+        const name = document.getElementById('nickname-input').value.trim();
+        const code = document.getElementById('code-input').value.trim().toUpperCase();
+        if(!name || !code) return alert('닉네임과 방 코드를 채워주세요!');
+        socket.emit('join_room', { code, nickname: name });
+    };
+
+    socket.on('room_created', (code) => {
+        myRoomCode = code;
+        lobbyScreen.style.display = 'none';
+        roomScreen.style.display = 'flex';
+        document.getElementById('room-code-txt').innerText = code;
+        document.getElementById('start-btn').style.display = 'block';
+        document.getElementById('wait-msg').style.display = 'none';
+    });
+
+    socket.on('room_joined', (code) => {
+        myRoomCode = code;
+        lobbyScreen.style.display = 'none';
+        roomScreen.style.display = 'flex';
+        document.getElementById('room-code-txt').innerText = code;
+    });
+
+    socket.on('update_players', (players) => {
+        const listDiv = document.getElementById('waiting-players');
+        listDiv.innerHTML = "<h3>접속 중인 유저</h3>" + players.map(p => `<div class='player-item'><span>${p.name}</span><b>${p.isHost ? '[방장]' : ''}</b></div>`).join('');
+    });
+
+    socket.on('error_msg', (msg) => alert(msg));
+
+    // 2. 게임 시작 연동
+    document.getElementById('start-btn').onclick = () => {
+        socket.emit('start_game', myRoomCode);
+    };
+
+    socket.on('trigger_focus_phase', (data) => {
+        roomScreen.style.display = 'none';
+        gameScreen.style.display = 'flex';
+        document.getElementById('focus-zone').style.display = 'block';
+        document.getElementById('next-lvl-btn').style.display = 'none';
+        document.getElementById('txt-level').innerText = data.level;
+        document.getElementById('txt-lives').innerText = "❤️ ".repeat(data.lives);
+        document.getElementById('txt-shurikens').innerText = "🌟 ".repeat(data.shurikens);
+        document.getElementById('focus-status-txt').innerText = `[레벨 ${data.level}] 정신을 집중하세요.`;
+        document.getElementById('table-cards').innerHTML = "";
+        document.getElementById('my-cards').innerHTML = "";
+    });
+
+    // 정신집중 완료 버튼 처리
+    document.getElementById('focus-btn').onclick = () => {
+        socket.emit('focus_hand_down', myRoomCode);
+        document.getElementById('focus-btn').disabled = true;
+    };
+
+    socket.on('update_focus_status', (readyPlayerIds) => {
+        document.getElementById('focus-status-txt').innerText = `정신 집중 중... (${readyPlayerIds.length}명 완료)`;
+    });
+
+    socket.on('focus_success_countdown', () => {
+        document.getElementById('focus-status-txt').innerText = "✨ 모두 집중 완료! 2초 뒤 시작합니다.";
+    });
+
+    // 3. 인게임 상태 업데이트 및 카드 드로우
+    socket.on('update_game_state', (state) => {
+        document.getElementById('focus-zone').style.display = 'none';
+        document.getElementById('focus-btn').disabled = false;
+        
+        document.getElementById('txt-level').innerText = state.level;
+        document.getElementById('txt-lives').innerText = "❤️ ".repeat(state.lives);
+        document.getElementById('txt-shurikens').innerText = "🌟 ".repeat(state.shurikens);
+
+        // 유저 정보 렌더링
+        const pList = document.getElementById('game-players');
+        pList.innerHTML = state.allPlayers.map(p => `<div class='player-item'><span>${p.name}</span> <span>남은 카드: ${p.cardCount}장</span></div>`).join('');
+
+        // 테이블 바닥에 제출된 카드 렌더링
+        const table = document.getElementById('table-cards');
+        table.innerHTML = state.playedCards.map(c => `<div class="card ${c.isMistake ? 'mistake' : ''}">${c.val}</div>`).join('');
+
+        // 내 손패 카드 렌더링
+        const hand = document.getElementById('my-cards');
+        hand.innerHTML = state.myHand.map(val => `<div class="card" onclick="playCard(${val})">${val}</div>`).join('');
+    });
+
+    window.playCard = (val) => {
+        socket.emit('play_card', { roomCode: myRoomCode, cardNumber: val });
+    };
+
+    // 4. 이벤트 및 오류 연동 애니메이션 트리거
+    socket.on('mistake_animation', (data) => {
+        alert(`🚨 아차! 누군가 오름차순 규칙을 깼습니다! (목숨 -1)`);
+    });
+
+    socket.on('level_clear_trigger', (data) => {
+        alert(`🎉 레벨 ${data.cleared} 클리어!`);
+        document.getElementById('next-lvl-btn').style.display = 'block';
+    });
+
+    document.getElementById('next-lvl-btn').onclick = () => {
+        socket.emit('next_level_ready', myRoomCode);
+    };
+
+    socket.on('game_over_trigger', (msg) => {
+        alert(msg);
+        location.reload(); // 강제 리로드하여 첫 로비화면 복귀
+    });
+
+    // 5. 수리검 투표 기능 연동
+    document.getElementById('shuriken-btn').onclick = () => {
+        socket.emit('propose_shuriken', myRoomCode);
+    };
+
+    socket.on('start_shuriken_vote', () => {
+        const choice = confirm("🌟 누군가 수리검 사용을 제안했습니다. 동의하십니까?");
+        socket.emit('vote_shuriken', { roomCode: myRoomCode, vote: choice ? 'yes' : 'no' });
+    });
+
+    socket.on('shuriken_success_trigger', (cards) => {
+        alert(`🌟 수리검 발동 성공! 각자 가장 낮은 카드 [${cards.join(', ')}]를 한 장씩 버렸습니다.`);
+    });
+
+    socket.on('shuriken_cancelled_trigger', () => {
+        alert(`❌ 수리검 제안이 거절되었습니다. 전원 만장일치여야 합니다.`);
+    });
+</script>
 </body>
 </html>
