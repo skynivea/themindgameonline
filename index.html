@@ -408,7 +408,7 @@
       }
     });
 
-    /* 오름차순 실패 시 연출 함수: 요구사항에 맞춰 완전히 전면 수정 */
+   /* 오름차순 실패 시 연출 함수: 형님의 개연성 + 중복 방지 피드백 반영 완료 */
     socket.on('mistake_animation', (data) => {
       isPlayLocked = true;
       document.getElementById('my-hand').classList.add('disabled-hand');
@@ -416,7 +416,7 @@
       const tableArea = document.getElementById('table-area');
       if (!tableArea) return;
 
-      // 1단계: 화면 빨개지고 흔들리며 !! 표시 소환
+      // 1. 화면 진동 및 !! 경고 연출 시작
       const body = document.getElementById('game-body');
       body.classList.add('flash-bg', 'shake');
       
@@ -427,6 +427,7 @@
 
       setTimeout(() => { body.classList.remove('shake'); }, 400);
 
+      // 데이터 정제
       const mistakeSequence = data.sequence || [];
       let skippedList = [];
       
@@ -441,70 +442,90 @@
         skippedList.push({ val: fallbackVal, playerId: data.lowestCardPlayerId || myId, isTriggerCard: false });
       }
 
-      // 오름차순 정렬 (낮은 카드부터 먼저 날아가도록 설정)
+      // 오름차순 정렬 (누락된 카드들 정렬용)
       skippedList.sort((a, b) => a.val - b.val);
 
-      // 실수로 격발된 카드(잘못 낸 가장 높은 카드) 정보 추출
+      // 잘못 낸 '트리거 카드' 특정 (내가 냈거나, 타인이 잘못 낸 카드)
       const triggerInfo = skippedList.find(c => c.isTriggerCard) || skippedList[skippedList.length - 1];
+
+      // ==========================================
+      // [단계 1] 중복 카드 제거 및 트리거 카드 우측 선 이동
+      // ==========================================
+      let startX = window.innerWidth / 2;
+      let startY = window.innerHeight - 100;
       
-      // 2단계: 잘못 낸 카드가 일단 오른쪽으로 슈우욱 이동하기 (순간이동 차단)
-      setTimeout(() => {
-        // 실제 카드를 발사할 출발 위치(프로필 박스 혹은 내 손패) 구하기
-        let startX = window.innerWidth / 2;
-        let startY = window.innerHeight - 100;
-        
-        let isTriggerMe = (triggerInfo.playerId === myId);
-        if (!isTriggerMe) {
-          const pEl = document.getElementById(`player-${triggerInfo.playerId}`);
-          if (pEl) {
-            const r = pEl.getBoundingClientRect();
-            startX = r.left + r.width / 2;
-            startY = r.top + r.height / 2;
-          }
-        } else {
-          // 내가 낸 카드라면 내 손패 구역 중앙 부근에서 출발
-          const handEl = document.getElementById('my-hand');
-          if (handEl) {
-            const r = handEl.getBoundingClientRect();
-            startX = r.left + r.width / 2;
-            startY = r.top + r.height / 2;
-          }
+      const isTriggerMe = (triggerInfo.playerId === myId);
+
+      if (isTriggerMe) {
+        // 내가 낸 카드라면: 내 손패(Hand)에서 실제 해당 카드 요소를 찾아 투명화시킵니다. (중복 방지)
+        const handCards = document.getElementById('my-hand').querySelectorAll('.card');
+        let actualHandCard = null;
+        handCards.forEach(c => {
+          if (parseInt(c.innerText) === triggerInfo.val) actualHandCard = c;
+        });
+
+        if (actualHandCard) {
+          const rect = actualHandCard.getBoundingClientRect();
+          startX = rect.left + rect.width / 2;
+          startY = rect.top + rect.height / 2;
+          
+          // ★ 중요: 손패의 카드가 복사된 것처럼 보이지 않게 즉시 투명화 및 터치 불가 처리
+          actualHandCard.style.opacity = '0';
+          actualHandCard.style.pointerEvents = 'none';
         }
+      } else {
+        // 타인이 낸 카드라면: 해당 유저 프로필 위치에서 출발
+        const pEl = document.getElementById(`player-${triggerInfo.playerId}`);
+        if (pEl) {
+          const rect = pEl.getBoundingClientRect();
+          startX = rect.left + rect.width / 2;
+          startY = rect.top + rect.height / 2;
+          pEl.classList.add('highlight-mistake');
+        }
+      }
 
-        const tableRect = tableArea.getBoundingClientRect();
-        const waitX = tableRect.left + tableRect.width + 15;
-        const waitY = tableRect.top + tableRect.height / 2 - 39;
+      // 우측 대기 공간 좌표 계산
+      const tableRect = tableArea.getBoundingClientRect();
+      const waitX = tableRect.left + tableRect.width + 15;
+      const waitY = tableRect.top + tableRect.height / 2 - 39;
 
-        const triggerCard = document.createElement('div');
-        triggerCard.className = 'card raining-card mistake-trigger';
-        triggerCard.innerText = triggerInfo.val;
-        triggerCard.style.left = `${startX - 26}px`;
-        triggerCard.style.top = `${startY - 39}px`;
-        triggerCard.style.transform = 'scale(0.5) rotate(0deg)';
-        triggerCard.style.opacity = '0';
-        triggerCard.style.zIndex = 550;
-        document.body.appendChild(triggerCard);
+      // 애니메이션용 가상 카드 생성 (손/프로필에서 출발)
+      const triggerCard = document.createElement('div');
+      triggerCard.className = 'card raining-card mistake-trigger';
+      triggerCard.innerText = triggerInfo.val;
+      triggerCard.style.left = `${startX - 26}px`;
+      triggerCard.style.top = `${startY - 39}px`;
+      triggerCard.style.transform = 'scale(0.8) rotate(0deg)';
+      triggerCard.style.opacity = '0.5';
+      triggerCard.style.zIndex = 550;
+      document.body.appendChild(triggerCard);
 
-        void triggerCard.offsetWidth; // 리플로우 강제
+      // 리플로우 강제 후 우측 대기 장소로 슈우욱 이동 실행
+      void triggerCard.offsetWidth;
 
-        // 우측 대기 장소로 매끄럽게 슈우욱 이동
-        triggerCard.style.left = `${waitX}px`;
-        triggerCard.style.top = `${waitY}px`;
-        triggerCard.style.transform = 'scale(1) rotate(15deg)';
-        triggerCard.style.opacity = '1';
-        triggerCard.style.border = '2px dashed #ff4757';
+      triggerCard.style.left = `${waitX}px`;
+      triggerCard.style.top = `${waitY}px`;
+      triggerCard.style.transform = 'scale(1.1) rotate(15deg)'; // 주목도를 높이기 위해 약간 키우고 회전
+      triggerCard.style.opacity = '1';
+      triggerCard.style.boxShadow = '0 0 20px #ff4757';
 
-        // 3단계: 낸 카드보다 오름차순으로 앞에 있는 카드들이 순서대로 카드 더미를 향해 슈우욱 이동
+      // ==========================================
+      // [단계 2] 트리거 카드 이동 완료 후, 누락 카드들 순차 등장
+      // ==========================================
+      // 트리거 카드가 우측으로 완전히 이동(약 600ms 소요)한 뒤에 누락 카드 연출을 시작합니다.
+      setTimeout(() => {
         let animIdx = 0;
+        
         skippedList.forEach((cardInfo) => {
-          if (cardInfo.val === triggerInfo.val && cardInfo.playerId === triggerInfo.playerId) return; // 트리거 카드는 제외
+          // 트리거 카드는 이미 우측에 있으므로 누락 카드 등장 목록에서 제외합니다.
+          if (cardInfo.val === triggerInfo.val && cardInfo.playerId === triggerInfo.playerId) return;
 
           setTimeout(() => {
             let srcX = window.innerWidth / 2;
-            let srcY = 80;
+            let srcY = 100;
             
-            // 중복 느낌 제거 패치: 플레이어 카드 소트 또는 프로필에서 직접 추적하여 이동
             if (cardInfo.playerId === myId) {
+              // 내 손패에 있던 누락 카드라면 손에서 실제 요소를 찾아서 투명화 시키고 출발
               const handCards = document.getElementById('my-hand').querySelectorAll('.card');
               let targetHandCard = null;
               handCards.forEach(c => { if(parseInt(c.innerText) === cardInfo.val) targetHandCard = c; });
@@ -513,12 +534,11 @@
                 const r = targetHandCard.getBoundingClientRect();
                 srcX = r.left + r.width / 2;
                 srcY = r.top + r.height / 2;
-                targetHandCard.style.opacity = '0'; // 출발하면서 손패에서 일시적으로 감추기
-              } else {
-                const r = document.getElementById('my-hand').getBoundingClientRect();
-                srcX = r.left + r.width / 2; srcY = r.top + r.height / 2;
+                targetHandCard.style.opacity = '0';
+                targetHandCard.style.pointerEvents = 'none';
               }
             } else {
+              // 타인 프로필에서 출발
               const pEl = document.getElementById(`player-${cardInfo.playerId}`);
               if (pEl) {
                 const r = pEl.getBoundingClientRect();
@@ -529,6 +549,7 @@
               }
             }
 
+            // 누락 카드 생성 및 발사
             const rainCard = document.createElement('div');
             rainCard.className = 'card raining-card';
             rainCard.innerText = cardInfo.val;
@@ -549,22 +570,27 @@
             rainCard.style.transform = `scale(1) rotate(${rot}deg)`;
             rainCard.style.opacity = '1';
 
-          }, animIdx * 600);
+          }, animIdx * 500); // 0.5초 간격으로 순서대로 날아옴
           animIdx++;
         });
 
-        // 4단계: 누락 카드들 결착 후 우측에 있던 트리거 카드가 스르륵 최종 중앙 카드 더미로 합쳐지기
+        // ==========================================
+        // [단계 3] 누락 카드 정리 완료 후, 우측 대기 카드가 최종 합류
+        // ==========================================
+        // 모든 누락 카드가 테이블에 안착한 뒤 (누락 카드 수 * 500ms + 여유시간) 작동합니다.
         setTimeout(() => {
           const destX = tableRect.left + tableRect.width / 2 + (Math.random() * 40 - 20);
           const destY = tableRect.top + tableRect.height / 2 + (Math.random() * 30 - 15);
           const rot = (Math.random() * 20) - 10;
           
-          triggerCard.style.border = '';
+          triggerCard.style.boxShadow = '';
           triggerCard.style.left = `${destX - 26}px`;
           triggerCard.style.top = `${destY - 39}px`;
           triggerCard.style.transform = `scale(1) rotate(${rot}deg)`;
 
-          // 5단계: [실패 완료 후 계속 묻는 유도창 생략] 연출 완전히 끝나면 자동으로 청소 후 동기화 요청
+          // ==========================================
+          // [단계 4] 연출 종료 및 게임 자동 재개 (터치 대기 패널 완전 삭제)
+          // ==========================================
           setTimeout(() => {
             alertMark.remove();
             document.body.classList.remove('flash-bg');
@@ -574,15 +600,15 @@
             isPlayLocked = false;
             document.getElementById('my-hand').classList.remove('disabled-hand');
             
-            // 서버에 연출 종료 알림 후 최신 방 상태 롤백/복구 연동 유도
+            // 동기화 신호를 서버로 발송해 즉시 다음 턴을 진행시킵니다.
             socket.emit('play_card', { roomCode: currentRoomCode, cardNumber: 'SYNC_MISTAKE_DONE' });
           }, 900);
 
-        }, animIdx * 600 + 400);
+        }, animIdx * 500 + 300);
 
-      }, 500);
+      }, 650); // 트리거 카드 우측 이동 시간 확보를 위한 대기시간
     });
-
+    
     socket.on('level_clear_trigger', (data) => {
       document.getElementById('clear-subtitle').innerText = `레벨 ${data.cleared}을 완벽하게 클리어했습니다!`;
       let reward = "";
