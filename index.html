@@ -19,26 +19,34 @@
     }
 
     /* 성급하게 먼저 내서 지목당한 플레이어 하이라이트 효과 */
-   /* ❌ 기존 .highlight-mistake를 아래 스타일로 덮어쓰기 하세요 */
-.highlight-mistake { 
-  animation: targetPulse 0.6s infinite alternate; 
-  border-color: #ff4757 !important; 
-  box-shadow: 0 0 25px #ff4757 !important;
-  z-index: 999 !important; /* 다른 어떤 카드나 레이어보다 위에 오도록 조절 */
-  pointer-events: none;
-}
+    .highlight-mistake { 
+      animation: targetPulse 0.6s infinite alternate; 
+      border-color: #ff4757 !important; 
+      box-shadow: 0 0 25px #ff4757 !important;
+      z-index: 999 !important;
+      pointer-events: none;
+    }
 
-/* ❌ 기존 .table-area에 쌓이는 stacked-card가 혹시 주범 카드를 가리지 않도록 고정 */
-.table-area {
-  /* ... 기존 속성 그대로 ... */
-  overflow: visible !important; /* 카드가 우측 밖으로 튀어나와도 잘리지 않게 필수 */
-}
+    .table-area {
+      height: 180px; 
+      background-color: rgba(0,0,0,0.4); 
+      border-radius: 15px; 
+      display: flex; 
+      justify-content: center; 
+      align-items: center; 
+      margin-bottom: 15px; 
+      border: 2px dashed rgba(255,255,255,0.15); 
+      position: relative; 
+      padding: 10px; 
+      overflow: visible !important; /* 카드가 우측 밖으로 튀어나와도 잘리지 않게 필수 */
+    }
+    
     @keyframes targetPulse {
       0% { border-color: #ff4757; }
       100% { border-color: #ffd700; }
     }
 
-    .panel { background-color: #212135; padding: 30px 20px; border-radius: 20px; text-align: center; width: 90%; max-width: 400px; box-shadow: 0 10px 30px rgba(0,0,0,0.5); z-index: 1; box-sizing: border-box; }
+    .panel { background-color: #212135; padding: 30px 20px; border-radius: 20px; text-align: center; width: 90%; max-width: 400px; box-shadow: 0 10px 30px rgba(0,0,0,0.5); z-index: 5; box-sizing: border-box; }
     .game-board { width: 100%; max-width: 600px; position: relative; transition: transform 0.1s; background-color: transparent; box-shadow: none; padding: 10px; }
     
     .lobby-menu-btns { display: flex; gap: 15px; margin-bottom: 20px; justify-content: center; }
@@ -58,7 +66,6 @@
     .status-bar { display: flex; justify-content: space-around; background-color: #2d2d44; padding: 12px; border-radius: 10px; margin-bottom: 15px; font-size: 0.95em; font-weight: bold; align-items: center; gap: 5px; }
     .status-bar button { padding: 6px 10px; font-size: 0.8em; margin: 0; }
     
-    .table-area { height: 180px; background-color: rgba(0,0,0,0.4); border-radius: 15px; display: flex; justify-content: center; align-items: center; margin-bottom: 15px; border: 2px dashed rgba(255,255,255,0.15); position: relative; padding: 10px; overflow: visible; }
     .hand-area { display: flex; justify-content: center; gap: 8px; min-height: 90px; flex-wrap: wrap; max-height: 190px; overflow-y: auto; padding: 5px; }
     
     .disabled-hand { pointer-events: none !important; opacity: 0.6; }
@@ -121,7 +128,7 @@
 
     /* 모달 알림창 디자인 최적화 */
     .modal-content { background-color: #212135; padding: 25px 20px; border-radius: 20px; width: 90%; max-width: 360px; box-sizing: border-box; text-align: center; }
-    /* 프로필 밑에 붙는 미니 카드 스타일 (원래 카드의 딱 절반 크기 & 가독성 강화) */
+    /* 프로필 밑에 붙는 미니 카드 스타일 */
     .shuriken-mini-card {
       display: inline-flex;
       align-items: center;
@@ -130,21 +137,17 @@
       color: #ffd700 !important;
       border: 2px solid #ffd700 !important;
       border-radius: 6px;
-      
-      /* 원래 카드의 절반 크기 (가로 26px, 세로 39px) 및 뚜렷한 가독성 */
       width: 26px;
       height: 39px;
       font-size: 1.05rem;
       font-weight: 900;
       text-shadow: 1px 1px 2px rgba(0,0,0,0.8);
       box-shadow: 0 3px 6px rgba(0,0,0,0.5);
-      
       position: relative;
       margin: 2px;
       animation: pop-in 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275);
     }
 
-    /* 미니 카드 우측 상단에 노란색 미니 별(수리검 표식) 얹기 */
     .shuriken-mini-card::after {
       content: "★";
       position: absolute;
@@ -278,8 +281,8 @@
     <div class="click-notice">화면을 클릭하면 닫힙니다.</div>
   </div>
 
-  <!-- 수리검 투표창 모달 -->
-  <div id="vote-overlay" class="overlay" style="display: none !important;">
+  <!-- 수리검 투표창 모달 (기존의 강제 클래스 충돌 방지를 위해 class="overlay" 제거 및 hidden 기본 적용) -->
+  <div id="vote-overlay" class="hidden" style="position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.8); z-index: 150; display: flex; flex-direction: column; justify-content: center; align-items: center; text-align: center; padding: 20px; box-sizing: border-box;">
     <div class="modal-content" onclick="event.stopPropagation()">
       <h3 style="margin-top: 0; font-size: 1.35rem;">⭐ 수리검 사용 투표</h3>
       <p style="font-size: 0.95rem; color: #ccc;">모든 플레이어가 찬성해야 발동됩니다.</p>
