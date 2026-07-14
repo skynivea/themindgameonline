@@ -175,53 +175,58 @@ io.on('connection', (socket) => {
     io.to(roomCode).emit('start_shuriken_vote', { total: room.players.length });
   });
 
-  socket.on('vote_shuriken', (data) => {
-    const { roomCode, vote } = data;
-    const room = rooms[roomCode];
-    if (!room || !room.gameState || !room.gameState.shurikenVote) return;
-    
-    if (room.gameState.shurikenVote.voters.includes(socket.id)) return;
-    
-    room.gameState.shurikenVote.voters.push(socket.id);
-    if (vote === 'yes') room.gameState.shurikenVote.yes++;
-    else room.gameState.shurikenVote.no++;
-    
-    io.to(roomCode).emit('update_shuriken_vote', {
-      yes: room.gameState.shurikenVote.yes,
-      no: room.gameState.shurikenVote.no,
-      total: room.players.length
-    });
-
-    if (room.gameState.shurikenVote.voters.length === room.players.length) {
-      if (room.gameState.shurikenVote.yes === room.players.length) {
-        room.gameState.shurikens--;
-        let discardedCards = [];
-        
-        room.players.forEach(p => {
-          if (p.hand && p.hand.length > 0) {
-            const card = p.hand.shift();
-            discardedCards.push(card);
-          }
-        });
-        
-        discardedCards.sort((a, b) => a - b);
-        discardedCards.forEach(card => {
-          room.gameState.playedCards.push({ val: card, isMistake: false });
-        });
-        
-        io.to(roomCode).emit('shuriken_success_trigger', discardedCards);
-        delete room.gameState.shurikenVote;
-        
-        setTimeout(() => {
-          if (!checkLevelComplete(room, roomCode)) sendGameState(room);
-        }, 1000);
-      } else {
-        io.to(roomCode).emit('shuriken_cancelled_trigger');
-        delete room.gameState.shurikenVote;
-        sendGameState(room);
-      }
-    }
+// 💻 [수정본] vote_shuriken 이벤트 수신부 전체 교체
+socket.on('vote_shuriken', (data) => {
+  const { roomCode, vote } = data;
+  const room = rooms[roomCode];
+  if (!room || !room.gameState || !room.gameState.shurikenVote) return;
+  
+  if (room.gameState.shurikenVote.voters.includes(socket.id)) return;
+  
+  room.gameState.shurikenVote.voters.push(socket.id);
+  if (vote === 'yes') room.gameState.shurikenVote.yes++;
+  else room.gameState.shurikenVote.no++;
+  
+  io.to(roomCode).emit('update_shuriken_vote', {
+    yes: room.gameState.shurikenVote.yes,
+    no: room.gameState.shurikenVote.no,
+    total: room.players.length
   });
+
+  if (room.gameState.shurikenVote.voters.length === room.players.length) {
+    if (room.gameState.shurikenVote.yes === room.players.length) {
+      room.gameState.shurikens--;
+      let discardedCards = [];
+      
+      room.players.forEach(p => {
+        if (p.hand && p.hand.length > 0) {
+          // [★버그 수정] 혹시라도 순서가 꼬여있을지 모르는 손패를 "숫자 오름차순"으로 확실하게 재정렬합니다!
+          p.hand.sort((a, b) => a - b);
+          
+          // 이제 정렬이 완벽하니 shift()를 하면 무조건 '가장 작은 카드'가 나옵니다.
+          const card = p.hand.shift();
+          discardedCards.push(card);
+        }
+      });
+      
+      discardedCards.sort((a, b) => a - b);
+      discardedCards.forEach(card => {
+        room.gameState.playedCards.push({ val: card, isMistake: false });
+      });
+      
+      io.to(roomCode).emit('shuriken_success_trigger', discardedCards);
+      delete room.gameState.shurikenVote;
+      
+      setTimeout(() => {
+        if (!checkLevelComplete(room, roomCode)) sendGameState(room);
+      }, 1000);
+    } else {
+      io.to(roomCode).emit('shuriken_cancelled_trigger');
+      delete room.gameState.shurikenVote;
+      sendGameState(room);
+    }
+  }
+});
 
   socket.on('send_emoticon', (data) => {
     const { roomCode, emoticon } = data;
