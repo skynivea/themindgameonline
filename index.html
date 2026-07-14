@@ -114,6 +114,43 @@
 
     /* 모달 알림창 디자인 최적화 */
     .modal-content { background-color: #212135; padding: 25px 20px; border-radius: 20px; width: 90%; max-width: 360px; box-sizing: border-box; text-align: center; }
+    /* 프로필 밑에 붙는 미니 카드 스타일 (원래 카드의 딱 절반 크기 & 가독성 강화) */
+    .shuriken-mini-card {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      background: linear-gradient(135deg, #2f3640, #1e222b) !important;
+      color: #ffd700 !important;
+      border: 2px solid #ffd700 !important;
+      border-radius: 6px;
+      
+      /* 원래 카드의 절반 크기 (가로 26px, 세로 39px) 및 뚜렷한 가독성 */
+      width: 26px;
+      height: 39px;
+      font-size: 1.05rem;
+      font-weight: 900;
+      text-shadow: 1px 1px 2px rgba(0,0,0,0.8);
+      box-shadow: 0 3px 6px rgba(0,0,0,0.5);
+      
+      position: relative;
+      margin: 2px;
+      animation: pop-in 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+    }
+
+    /* 미니 카드 우측 상단에 노란색 미니 별(수리검 표식) 얹기 */
+    .shuriken-mini-card::after {
+      content: "★";
+      position: absolute;
+      top: -5px;
+      right: -5px;
+      font-size: 0.55rem;
+      color: #ffd700;
+    }
+
+    @keyframes pop-in {
+      0% { transform: scale(0) rotate(-15deg); opacity: 0; }
+      100% { transform: scale(1) rotate(0deg); opacity: 1; }
+    }
   </style>
 </head>
 <body id="game-body">
