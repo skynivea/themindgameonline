@@ -54,9 +54,14 @@ io.on('connection', (socket) => {
     if (pCount >= 4) { maxLvl = 8; startLives = 4; startShurikens = 1; }
 
     room.gameState = {
-      level: 1, maxLevel: maxLvl, lives: startLives, shurikens: startShurikens, playedCards: [],
+      level: 1, 
+      maxLevel: maxLvl, 
+      lives: startLives, 
+      shurikens: startShurikens, 
+      playedCards: [],
       focusPlayers: [], 
-      readyPlayers: []  
+      readyPlayers: [],
+      hasMistakeInLevel: false // 👈 라운드 내 실수 트래킹용 변수 추가
     };
 
     startFocusPhase(room, roomCode);
@@ -96,7 +101,7 @@ io.on('connection', (socket) => {
     }
   });
 
-  // 🛠️ 대폭 수정 및 보완된 play_card 이벤트
+  // 🛠️ 카드를 내는 플레이 로직 개선
   socket.on('play_card', (data) => {
     const { roomCode, cardNumber } = data;
     const room = rooms[roomCode];
@@ -112,6 +117,7 @@ io.on('connection', (socket) => {
     const playingPlayer = room.players.find(p => p.id === socket.id);
     if (!playingPlayer) return;
 
+    // --- [정답 처리] ---
     if (cardNumber === lowestCard) {
       playingPlayer.hand.shift();
       room.gameState.playedCards.push({ val: cardNumber, isMistake: false });
@@ -119,10 +125,15 @@ io.on('connection', (socket) => {
       if (!checkLevelComplete(room, roomCode)) {
         sendGameState(room);
       }
-    } else {
+    } 
+    // --- [오답 처리] ---
+    else {
       room.gameState.lives--;
+      room.gameState.hasMistakeInLevel = true; // 👈 해당 레벨 도중 실수 발생 기록
+      
       let cardsToDiscard = [];
 
+      // 잘못 낸 카드보다 작은 숫자를 쥐고 있던 플레이어들의 카드를 강제 정렬해 버리기
       room.players.forEach(p => {
         if (p.hand && p.hand.length > 0) {
           while (p.hand.length > 0 && p.hand[0] < cardNumber) {
@@ -130,12 +141,13 @@ io.on('connection', (socket) => {
             cardsToDiscard.push({
               playerId: p.id,
               playerName: p.name,
-              val: lowCard
+              val: lowCard // 필드명 val 통일
             });
           }
         }
       });
 
+      // 낸 플레이어 본인의 손패에서도 해당 카드 제거
       const playingPlayerCardIdx = playingPlayer.hand.indexOf(cardNumber);
       if (playingPlayerCardIdx !== -1) {
         playingPlayer.hand.splice(playingPlayerCardIdx, 1);
@@ -155,12 +167,14 @@ io.on('connection', (socket) => {
         room.gameState.playedCards.push({ val: item.val, isMistake: true });
       });
 
+      // 클라이언트에 에러 애니메이션 정보 즉시 하달 (생명 하트 개수 선반영)
       io.to(roomCode).emit('mistake_animation', { 
         message: `🚨 ${playingPlayer.name}님이 순서를 어기고 ${cardNumber}번 카드를 잘못 냈습니다!`,
         lives: room.gameState.lives,
         sequence: cardsToDiscard 
       });
 
+      // 카드 낙하 연출이 완전히 마무리될 시간을 연출 카드 장당 1초씩 동적으로 계산
       const totalAnimationTime = 1500 + (cardsToDiscard.length * 1000); 
 
       if (room.gameState.lives <= 0) {
@@ -231,7 +245,8 @@ io.on('connection', (socket) => {
             if (cardIdx !== -1) {
               p.hand.splice(cardIdx, 1); 
               p.shurikenCards.push(minCard); 
-              discardedCards.push({ playerId: p.id, playerName: p.name, card: minCard });
+              // 수리검 버려진 카드 정보 필드명 통일 (val)
+              discardedCards.push({ playerId: p.id, playerName: p.name, val: minCard });
             }
           }
         });
@@ -241,7 +256,7 @@ io.on('connection', (socket) => {
         
         setTimeout(() => {
           if (!checkLevelComplete(room, roomCode)) sendGameState(room);
-        }, 1000);
+        }, 2500); // 수리검 연출 속도 확보를 위한 딜레이 조정
       } else {
         io.to(roomCode).emit('shuriken_cancelled_trigger');
         delete room.gameState.shurikenVote;
@@ -286,6 +301,7 @@ io.on('connection', (socket) => {
     let deck = Array.from({length: 100}, (_, i) => i + 1);
     shuffle(deck);
     room.gameState.playedCards = [];
+    room.gameState.hasMistakeInLevel = false; // 새 레벨 시작 시 실수 플래그 초기화
 
     room.players.forEach(player => {
       player.hand = [];
@@ -312,9 +328,11 @@ io.on('connection', (socket) => {
         if (clearedLvl === 8) room.gameState.shurikens++;
         if (clearedLvl === 9) room.gameState.lives++;
 
+        // 👈 실수가 있었는지 여부를 클라이언트로 같이 내려보내어 분기 처리 연출 가능하게 만듭니다.
         io.to(roomCode).emit('level_clear_trigger', {
           cleared: clearedLvl,
-          next: room.gameState.level
+          next: room.gameState.level,
+          perfect: !room.gameState.hasMistakeInLevel // 한 번도 안 틀렸을 때만 perfect: true
         });
       }
       return true;
