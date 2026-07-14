@@ -66,15 +66,32 @@
       100% { transform: scale(1) translateY(0) rotate(var(--rand-rot)) translate(var(--rand-x), var(--rand-y)); opacity: 1; box-shadow: 0 3px 8px rgba(0,0,0,0.4); }
     }
 
-    /* 특정 플레이어 위치에서 테이블로 날아오는 카드 효과 */
+    /* 특정 위치에서 목적지로 미끄러지듯 이동하는 카드 효과 (순간이동 차단용 수정) */
     .raining-card { 
       position: fixed; 
       background-color: #ffafb7; 
       color: #700000; 
       border: 2px solid #ff4757; 
       pointer-events: none; 
-      z-index: 100;
-      transition: all 0.5s cubic-bezier(0.25, 1, 0.5, 1);
+      z-index: 500;
+      transition: left 0.55s cubic-bezier(0.25, 1, 0.5, 1), top 0.55s cubic-bezier(0.25, 1, 0.5, 1), transform 0.55s cubic-bezier(0.25, 1, 0.5, 1), opacity 0.55s ease;
+    }
+
+    /* 에러 발생 시 중앙 경고 !! 마크 연출 스타일 */
+    .danger-indicator {
+      position: absolute;
+      font-size: 4.5rem;
+      color: #ff4757;
+      font-weight: 900;
+      text-shadow: 0 0 20px #ff0000, 0 0 40px #ff0000;
+      z-index: 600;
+      animation: popAlert 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.5) forwards;
+      pointer-events: none;
+    }
+    @keyframes popAlert {
+      0% { transform: scale(0) rotate(-20deg); opacity: 0; }
+      50% { transform: scale(1.3) rotate(10deg); }
+      100% { transform: scale(1) rotate(0deg); opacity: 1; }
     }
 
     .opponents-area { display: flex; justify-content: center; gap: 10px; margin-bottom: 15px; flex-wrap: wrap; }
@@ -91,7 +108,7 @@
     
     @keyframes popGigantic { 0% { opacity: 0; transform: translate(-50%, 20px) scale(0.5); } 100% { opacity: 1; transform: translate(-50%, 0) scale(1); } }
     .flash-bg { animation: flashRed 0.5s infinite alternate; }
-    @keyframes flashRed { 0% { background-color: #1a1a2e; } 100% { background-color: #500000; } }
+    @keyframes flashRed { 0% { background-color: #1a1a2e; } 100% { background-color: #4a0d17; } }
     
     .overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.9); z-index: 100; display: flex; flex-direction: column; justify-content: center; align-items: center; text-align: center; padding: 20px; box-sizing: border-box; }
     .overlay-title { font-size: 2.8em; color: #6c63ff; text-shadow: 0 0 15px rgba(108,99,255,0.5); margin-bottom: 15px; font-weight: bold; }
@@ -114,7 +131,8 @@
 
     /* 모달 알림창 디자인 최적화 */
     .modal-content { background-color: #212135; padding: 25px 20px; border-radius: 20px; width: 90%; max-width: 360px; box-sizing: border-box; text-align: center; }
-    /* 프로필 밑에 붙는 미니 카드 스타일 (원래 카드의 딱 절반 크기 & 가독성 강화) */
+    
+    /* 프로필 밑에 붙는 미니 카드 스타일 */
     .shuriken-mini-card {
       display: inline-flex;
       align-items: center;
@@ -123,21 +141,17 @@
       color: #ffd700 !important;
       border: 2px solid #ffd700 !important;
       border-radius: 6px;
-      
-      /* 원래 카드의 절반 크기 (가로 26px, 세로 39px) 및 뚜렷한 가독성 */
       width: 26px;
       height: 39px;
       font-size: 1.05rem;
       font-weight: 900;
       text-shadow: 1px 1px 2px rgba(0,0,0,0.8);
       box-shadow: 0 3px 6px rgba(0,0,0,0.5);
-      
       position: relative;
       margin: 2px;
       animation: pop-in 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275);
     }
 
-    /* 미니 카드 우측 상단에 노란색 미니 별(수리검 표식) 얹기 */
     .shuriken-mini-card::after {
       content: "★";
       position: absolute;
@@ -232,14 +246,8 @@
     <div class="hand-area" id="my-hand"></div>
   </div>
 
-  <!-- 오버레이 1: 실패 연출 -->
-  <div id="mistake-overlay" class="overlay hidden">
-    <div class="overlay-title red">실패!</div>
-    <p style="font-size: 1.2em; margin: 5px 0;" id="mistake-player-announce">누가 더 낮은 카드를 성급하게 지나쳤을까요?</p>
-    <div class="overlay-card" id="failed-card-display"></div>
-    <p style="font-size: 1.1em; color: #ff4757; font-weight: bold;">목숨이 1개 차감되었습니다.</p>
-    <div class="click-notice">화면을 터치하면 게임으로 돌아갑니다.</div>
-  </div>
+  <!-- 오버레이 1: 실패 연출 (디자인 유지용 요소만 유지, 사용은 생략) -->
+  <div id="mistake-overlay" class="overlay hidden"></div>
 
   <!-- 오버레이 2: 레벨 클리어 알림 -->
   <div id="clear-overlay" class="overlay hidden" onclick="closeClearOverlay()">
@@ -400,64 +408,24 @@
       }
     });
 
-    /* 플레이어 박스 위치에서 테이블 중앙으로 카드를 떨구는 동적 애니메이션 함수 */
-    function dropCardFromPlayer(playerId, cardNumber, delay, zIndex) {
-      setTimeout(() => {
-        const playerEl = document.getElementById(`player-${playerId}`);
-        const tableArea = document.getElementById('table-area');
-        if (!tableArea) return;
-
-        // 1. 해당 순서의 플레이어에게 집중 하이라이트 부여
-        document.querySelectorAll('.opponent-box').forEach(box => box.classList.remove('highlight-mistake'));
-        if (playerEl) {
-          playerEl.classList.add('highlight-mistake');
-        }
-
-        // 2. 임시 카드 요소 생성
-        const rainCard = document.createElement('div');
-        rainCard.className = 'card raining-card';
-        rainCard.innerText = cardNumber;
-        rainCard.style.zIndex = zIndex;
-
-        // 3. 발사할 위치(플레이어 프로필)와 도달할 위치(테이블) 계산
-        let startX = window.innerWidth / 2;
-        let startY = 80; // 기본값 (상단 부근)
-        
-        if (playerEl) {
-          const rect = playerEl.getBoundingClientRect();
-          startX = rect.left + rect.width / 2;
-          startY = rect.top + rect.height / 2;
-        }
-
-        const tableRect = tableArea.getBoundingClientRect();
-        const destX = tableRect.left + tableRect.width / 2 + (Math.random() * 40 - 20);
-        const destY = tableRect.top + tableRect.height / 2 + (Math.random() * 30 - 15);
-        const rot = (Math.random() * 20) - 10;
-
-        // 초기 시작 위치 설정 (지목된 플레이어 위치)
-        rainCard.style.left = `${startX - 26}px`; // 카드가운데 정렬 보정 (width 52 / 2)
-        rainCard.style.top = `${startY - 39}px`;  // 카드가운데 정렬 보정 (height 78 / 2)
-        rainCard.style.transform = `scale(0.3) rotate(0deg)`;
-        rainCard.style.opacity = '0';
-
-        document.body.appendChild(rainCard);
-
-        // 4. 리플로우 강제 트리거 후 테이블 중앙으로 날아가기 작동
-        void rainCard.offsetWidth;
-
-        rainCard.style.left = `${destX - 26}px`;
-        rainCard.style.top = `${destY - 39}px`;
-        rainCard.style.transform = `scale(1) rotate(${rot}deg)`;
-        rainCard.style.opacity = '1';
-
-      }, delay);
-    }
-
-/* 오름차순 실패 시: 완벽한 개연성 중심 릴레이 애니메이션 */
+    /* 오름차순 실패 시 연출 함수: 요구사항에 맞춰 완전히 전면 수정 */
     socket.on('mistake_animation', (data) => {
       isPlayLocked = true;
       document.getElementById('my-hand').classList.add('disabled-hand');
-      document.body.classList.add('flash-bg');
+
+      const tableArea = document.getElementById('table-area');
+      if (!tableArea) return;
+
+      // 1단계: 화면 빨개지고 흔들리며 !! 표시 소환
+      const body = document.getElementById('game-body');
+      body.classList.add('flash-bg', 'shake');
+      
+      const alertMark = document.createElement('div');
+      alertMark.className = 'danger-indicator';
+      alertMark.innerText = '!!';
+      tableArea.appendChild(alertMark);
+
+      setTimeout(() => { body.classList.remove('shake'); }, 400);
 
       const mistakeSequence = data.sequence || [];
       let skippedList = [];
@@ -466,93 +434,154 @@
         skippedList = mistakeSequence.map(item => ({
           val: typeof item === 'object' ? item.val : item,
           playerId: item.playerId || myId,
-          isTriggerCard: item.isTriggerCard || false // 실수로 직접 낸 카드(예: 17)인지 여부
+          isTriggerCard: item.isTriggerCard || false
         }));
       } else {
         const fallbackVal = data.lowestCard || 0;
         skippedList.push({ val: fallbackVal, playerId: data.lowestCardPlayerId || myId, isTriggerCard: false });
       }
 
-      // 오름차순 정렬
+      // 오름차순 정렬 (낮은 카드부터 먼저 날아가도록 설정)
       skippedList.sort((a, b) => a.val - b.val);
 
-      // 릴레이 연출 작동
-      skippedList.forEach((cardInfo, idx) => {
-        const isTrigger = cardInfo.isTriggerCard || (cardInfo.val === data.lowestCard && cardInfo.playerId === (data.playerId || myId));
+      // 실수로 격발된 카드(잘못 낸 가장 높은 카드) 정보 추출
+      const triggerInfo = skippedList.find(c => c.isTriggerCard) || skippedList[skippedList.length - 1];
+      
+      // 2단계: 잘못 낸 카드가 일단 오른쪽으로 슈우욱 이동하기 (순간이동 차단)
+      setTimeout(() => {
+        // 실제 카드를 발사할 출발 위치(프로필 박스 혹은 내 손패) 구하기
+        let startX = window.innerWidth / 2;
+        let startY = window.innerHeight - 100;
         
-        if (isTrigger) {
-          // [개연성 패치 1] 내가 이미 낸 카드(17)는 내 몸에서 날아가지 않습니다.
-          // 대신 테이블 바로 옆(우측 대기 구역)에 가만히 생성해 두었다가, 
-          // 상대방 카드들(10, 11)이 먼저 날아와 꽂힌 후 마지막 차례에 스르륵 중앙으로 합쳐집니다!
+        let isTriggerMe = (triggerInfo.playerId === myId);
+        if (!isTriggerMe) {
+          const pEl = document.getElementById(`player-${triggerInfo.playerId}`);
+          if (pEl) {
+            const r = pEl.getBoundingClientRect();
+            startX = r.left + r.width / 2;
+            startY = r.top + r.height / 2;
+          }
+        } else {
+          // 내가 낸 카드라면 내 손패 구역 중앙 부근에서 출발
+          const handEl = document.getElementById('my-hand');
+          if (handEl) {
+            const r = handEl.getBoundingClientRect();
+            startX = r.left + r.width / 2;
+            startY = r.top + r.height / 2;
+          }
+        }
+
+        const tableRect = tableArea.getBoundingClientRect();
+        const waitX = tableRect.left + tableRect.width + 15;
+        const waitY = tableRect.top + tableRect.height / 2 - 39;
+
+        const triggerCard = document.createElement('div');
+        triggerCard.className = 'card raining-card mistake-trigger';
+        triggerCard.innerText = triggerInfo.val;
+        triggerCard.style.left = `${startX - 26}px`;
+        triggerCard.style.top = `${startY - 39}px`;
+        triggerCard.style.transform = 'scale(0.5) rotate(0deg)';
+        triggerCard.style.opacity = '0';
+        triggerCard.style.zIndex = 550;
+        document.body.appendChild(triggerCard);
+
+        void triggerCard.offsetWidth; // 리플로우 강제
+
+        // 우측 대기 장소로 매끄럽게 슈우욱 이동
+        triggerCard.style.left = `${waitX}px`;
+        triggerCard.style.top = `${waitY}px`;
+        triggerCard.style.transform = 'scale(1) rotate(15deg)';
+        triggerCard.style.opacity = '1';
+        triggerCard.style.border = '2px dashed #ff4757';
+
+        // 3단계: 낸 카드보다 오름차순으로 앞에 있는 카드들이 순서대로 카드 더미를 향해 슈우욱 이동
+        let animIdx = 0;
+        skippedList.forEach((cardInfo) => {
+          if (cardInfo.val === triggerInfo.val && cardInfo.playerId === triggerInfo.playerId) return; // 트리거 카드는 제외
+
           setTimeout(() => {
-            const tableArea = document.getElementById('table-area');
-            if (!tableArea) return;
+            let srcX = window.innerWidth / 2;
+            let srcY = 80;
+            
+            // 중복 느낌 제거 패치: 플레이어 카드 소트 또는 프로필에서 직접 추적하여 이동
+            if (cardInfo.playerId === myId) {
+              const handCards = document.getElementById('my-hand').querySelectorAll('.card');
+              let targetHandCard = null;
+              handCards.forEach(c => { if(parseInt(c.innerText) === cardInfo.val) targetHandCard = c; });
+              
+              if (targetHandCard) {
+                const r = targetHandCard.getBoundingClientRect();
+                srcX = r.left + r.width / 2;
+                srcY = r.top + r.height / 2;
+                targetHandCard.style.opacity = '0'; // 출발하면서 손패에서 일시적으로 감추기
+              } else {
+                const r = document.getElementById('my-hand').getBoundingClientRect();
+                srcX = r.left + r.width / 2; srcY = r.top + r.height / 2;
+              }
+            } else {
+              const pEl = document.getElementById(`player-${cardInfo.playerId}`);
+              if (pEl) {
+                const r = pEl.getBoundingClientRect();
+                srcX = r.left + r.width / 2;
+                srcY = r.top + r.height / 2;
+                pEl.classList.add('highlight-mistake');
+                setTimeout(() => { pEl.classList.remove('highlight-mistake'); }, 500);
+              }
+            }
 
             const rainCard = document.createElement('div');
-            rainCard.className = 'card raining-card mistake-trigger';
+            rainCard.className = 'card raining-card';
             rainCard.innerText = cardInfo.val;
-            rainCard.style.zIndex = 100 + idx;
-            
-            const tableRect = tableArea.getBoundingClientRect();
-            // 처음엔 테이블 우측 대기 구역에 소환
-            const waitX = tableRect.left + tableRect.width + 10;
-            const waitY = tableRect.top + tableRect.height / 2 - 39;
-            
-            rainCard.style.left = `${waitX}px`;
-            rainCard.style.top = `${waitY}px`;
-            rainCard.style.transform = 'scale(1) rotate(15deg)';
-            rainCard.style.opacity = '0.7'; // 실수 대기 카드임을 시각화
-            rainCard.style.border = '2px dashed #ff4757'; // 빨간 점선 테두리
-
+            rainCard.style.left = `${srcX - 26}px`;
+            rainCard.style.top = `${srcY - 39}px`;
+            rainCard.style.transform = 'scale(0.6) rotate(0deg)';
+            rainCard.style.opacity = '0.3';
             document.body.appendChild(rainCard);
 
-            // 잠시 후 중앙으로 스르륵 합쳐지는 애니메이션
-            setTimeout(() => {
-              const destX = tableRect.left + tableRect.width / 2 + (Math.random() * 40 - 20);
-              const destY = tableRect.top + tableRect.height / 2 + (Math.random() * 30 - 15);
-              const rot = (Math.random() * 20) - 10;
-              
-              rainCard.style.left = `${destX - 26}px`;
-              rainCard.style.top = `${destY - 39}px`;
-              rainCard.style.transform = `scale(1) rotate(${rot}deg)`;
-              rainCard.style.opacity = '1';
-              rainCard.style.border = ''; // 일반 카드로 복구
-            }, 800);
+            void rainCard.offsetWidth;
 
-          }, idx * 600);
-        } else {
-          // [개연성 패치 2] 꼬여버린 타인의 누락 카드(10, 11)만 정상적으로 프로필에서 뿜어져 나옵니다.
-          dropCardFromPlayer(cardInfo.playerId, cardInfo.val, idx * 600, 100 + idx);
-        }
-      });
+            const destX = tableRect.left + tableRect.width / 2 + (Math.random() * 40 - 20);
+            const destY = tableRect.top + tableRect.height / 2 + (Math.random() * 30 - 15);
+            const rot = (Math.random() * 20) - 10;
 
-      // 오버레이창 알림 띄우기
-      const totalDelay = skippedList.length * 600 + 1200; // 대기 카드 합쳐지는 속도 고려하여 딜레이 살짝 증가
-      setTimeout(() => {
-        document.querySelectorAll('.opponent-box').forEach(box => box.classList.remove('highlight-mistake'));
+            rainCard.style.left = `${destX - 26}px`;
+            rainCard.style.top = `${destY - 39}px`;
+            rainCard.style.transform = `scale(1) rotate(${rot}deg)`;
+            rainCard.style.opacity = '1';
 
-        const overlay = document.getElementById('mistake-overlay');
-        const displayCardNum = skippedList[0] ? skippedList[0].val : (data.lowestCard || "❓");
-        document.getElementById('failed-card-display').innerText = displayCardNum;
-        
-        if (data.message) {
-          document.getElementById('mistake-player-announce').innerText = data.message;
-        } else {
-          document.getElementById('mistake-player-announce').innerText = `오름차순 순서가 꼬였습니다! 먼저 낸 카드가 존재합니다.`;
-        }
-        overlay.classList.remove('hidden');
-      }, totalDelay);
+          }, animIdx * 600);
+          animIdx++;
+        });
+
+        // 4단계: 누락 카드들 결착 후 우측에 있던 트리거 카드가 스르륵 최종 중앙 카드 더미로 합쳐지기
+        setTimeout(() => {
+          const destX = tableRect.left + tableRect.width / 2 + (Math.random() * 40 - 20);
+          const destY = tableRect.top + tableRect.height / 2 + (Math.random() * 30 - 15);
+          const rot = (Math.random() * 20) - 10;
+          
+          triggerCard.style.border = '';
+          triggerCard.style.left = `${destX - 26}px`;
+          triggerCard.style.top = `${destY - 39}px`;
+          triggerCard.style.transform = `scale(1) rotate(${rot}deg)`;
+
+          // 5단계: [실패 완료 후 계속 묻는 유도창 생략] 연출 완전히 끝나면 자동으로 청소 후 동기화 요청
+          setTimeout(() => {
+            alertMark.remove();
+            document.body.classList.remove('flash-bg');
+            document.querySelectorAll('.raining-card').forEach(el => el.remove());
+            document.querySelectorAll('.opponent-box').forEach(box => box.classList.remove('highlight-mistake'));
+            
+            isPlayLocked = false;
+            document.getElementById('my-hand').classList.remove('disabled-hand');
+            
+            // 서버에 연출 종료 알림 후 최신 방 상태 롤백/복구 연동 유도
+            socket.emit('play_card', { roomCode: currentRoomCode, cardNumber: 'SYNC_MISTAKE_DONE' });
+          }, 900);
+
+        }, animIdx * 600 + 400);
+
+      }, 500);
     });
-
-    document.getElementById('mistake-overlay').onclick = function() {
-      document.body.classList.remove('flash-bg');
-      this.classList.add('hidden');
-      isPlayLocked = false;
-      document.getElementById('my-hand').classList.remove('disabled-hand');
-      
-      document.querySelectorAll('.raining-card').forEach(el => el.remove());
-      document.querySelectorAll('.opponent-box').forEach(box => box.classList.remove('highlight-mistake'));
-    };
 
     socket.on('level_clear_trigger', (data) => {
       document.getElementById('clear-subtitle').innerText = `레벨 ${data.cleared}을 완벽하게 클리어했습니다!`;
@@ -661,14 +690,13 @@
       document.getElementById('shuriken-cancel-overlay').classList.remove('hidden');
     });
 
-    /* 수리검 발동 성공 시: undefined 에러 수정 완료 */
+    /* 수리검 발동 성공 */
     socket.on('shuriken_success_trigger', (discardedCards) => {
       document.getElementById('vote-overlay').style.setProperty('display', 'none', 'important');
       const area = document.getElementById('shuriken-cards-area');
       area.innerHTML = '';
       
       discardedCards.forEach(item => {
-        // [디버깅] 오브젝트 형태로 데이터가 올 경우와 일반 숫자로 올 경우 둘 다 안전하게 값 추출
         const cardValue = typeof item === 'object' ? item.val : item;
         area.innerHTML += `<div class="shuriken-card">${cardValue}</div>`;
       });
@@ -692,8 +720,11 @@
       }
     }
 
-    /* 게임 상태 업데이트: 수리검 카드 박제 및 UI 갱신 버그 완벽 수정 */
+    /* 게임 상태 업데이트 */
     socket.on('update_game_state', (data) => {
+      // 애니메이션 레이어가 화면을 가려 오작동 유발하는 것 철저히 차단
+      document.querySelectorAll('.danger-indicator').forEach(el => el.remove());
+      
       document.getElementById('focus-overlay').classList.add('hidden');
       document.getElementById('game-room-panel').classList.add('hidden');
       document.getElementById('game-board-panel').classList.remove('hidden');
@@ -705,20 +736,18 @@
         const isMe = p.id === myId ? 'me' : '';
         const nameText = p.id === myId ? `${p.name} (나)` : p.name;
         
-        // 1. 수리검으로 폐기된 카드 템플릿 생성 (프로필 아래 고정 박제)
         let shurikenCardsHtml = '';
         if (p.shurikenCards && p.shurikenCards.length > 0) {
           shurikenCardsHtml = `
             <div class="discarded-shuriken-container" style="margin-top: 8px; display: flex; gap: 4px; justify-content: center; flex-wrap: wrap;">
               ${p.shurikenCards.map(c => {
                 const num = typeof c === 'object' ? c.val : c;
-                return `<span class="shuriken-mini-card" style="background: linear-gradient(135deg, #2f3640, #1e222b); color: #ffd700; border: 1.5px solid #ffd700; border-radius: 4px; padding: 2px 6px; font-size: 0.75em; font-weight: bold; box-shadow: 0 2px 4px rgba(0,0,0,0.3); animation: pop-in 0.3s ease;">⭐ ${num}</span>`;
+                return `<span class="shuriken-mini-card">⭐ ${num}</span>`;
               }).join('')}
             </div>
           `;
         }
 
-        // 2. 그려지는 자리에 수리검 카드 HTML 영역 추가
         opponentsArea.innerHTML += `
           <div class="opponent-box ${isMe}" id="player-${p.id}">
             <div style="font-size: 1.5em;">🧑</div>
@@ -749,8 +778,6 @@
           
           const cardEl = document.createElement('div');
           cardEl.className = className;
-          
-          // [디버깅] playedCards 출력 시 undefined 방어
           cardEl.innerText = typeof card === 'object' ? card.val : card;
           
           cardEl.style.zIndex = idx + 1;
