@@ -1,0 +1,512 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <title>더 마인드 | 웹 게임</title>
+  <style>
+    body { font-family: sans-serif; margin: 0; background-color: #1a1a2e; color: white; display: flex; justify-content: center; align-items: center; height: 100vh; flex-direction: column; overflow: hidden; transition: background-color 0.2s; user-select: none; }
+    
+    .shake { animation: screenShake 0.4s ease-in-out; }
+    @keyframes screenShake {
+      0%, 100% { transform: translate(0, 0) rotate(0deg); }
+      10% { transform: translate(-8px, -5px) rotate(-1.5deg); }
+      30% { transform: translate(6px, 4px) rotate(1.5deg); }
+      50% { transform: translate(-6px, 3px) rotate(-1deg); }
+      70% { transform: translate(5px, -3px) rotate(1deg); }
+      90% { transform: translate(-3px, 1px) rotate(-0.5deg); }
+    }
+
+    .panel { background-color: #212135; padding: 40px; border-radius: 20px; text-align: center; width: 400px; box-shadow: 0 10px 30px rgba(0,0,0,0.5); z-index: 1; }
+    .game-board { width: 800px; max-width: 95%; position: relative; transition: transform 0.1s; }
+    input { padding: 15px; border-radius: 8px; border: 2px solid #2d2d44; background-color: #1a1a2e; color: white; margin-bottom: 15px; width: 80%; text-align: center; }
+    button { padding: 15px 30px; border-radius: 8px; border: none; background-color: #6c63ff; color: white; font-size: 1.1em; cursor: pointer; margin: 5px; font-weight: bold; }
+    button:hover { background-color: #534bde; }
+    .btn-red { background-color: #ff4757; } .btn-red:hover { background-color: #ff2a3e; }
+    .player-list { display: flex; justify-content: center; gap: 15px; margin: 20px 0; }
+    .player-slot { background-color: #2d2d44; border-radius: 10px; padding: 20px; width: 80px; border: 2px solid #6c63ff; }
+    .hidden { display: none !important; }
+    
+    .status-bar { display: flex; justify-content: space-around; background-color: #2d2d44; padding: 15px; border-radius: 10px; margin-bottom: 15px; font-size: 1.2em; font-weight: bold; align-items: center; }
+    
+    .table-area { height: 180px; background-color: rgba(0,0,0,0.4); border-radius: 15px; display: flex; justify-content: center; align-items: center; margin-bottom: 20px; border: 2px dashed rgba(255,255,255,0.15); position: relative; padding: 20px; }
+    .hand-area { display: flex; justify-content: center; gap: 15px; min-height: 100px; }
+    
+    .disabled-hand { pointer-events: none !important; opacity: 0.6; }
+    
+    .card { width: 65px; height: 98px; background-color: white; color: black; border-radius: 8px; display: flex; justify-content: center; align-items: center; font-size: 1.6em; font-weight: bold; box-shadow: 0 4px 8px rgba(0,0,0,0.3); transition: transform 0.2s, box-shadow 0.2s; cursor: pointer; }
+    .card:hover { transform: translateY(-15px); border: 2px solid #6c63ff; box-shadow: 0 10px 20px rgba(108,99,255,0.4); }
+    .card.mistake { background-color: #ff4757; color: white; border: none !important; box-shadow: 0 0 15px #ff4757 !important; }
+    
+    .stacked-card { position: absolute; background-color: #f5f6fa; border: 2px solid #333; animation: dropCard 0.35s cubic-bezier(0.175, 0.885, 0.32, 1.275) forwards; pointer-events: none; }
+    @keyframes dropCard {
+      0% { transform: scale(1.6) translateY(-60px) rotate(-15deg); opacity: 0; box-shadow: 0 30px 30px rgba(0,0,0,0.6); }
+      100% { transform: scale(1) translateY(0) rotate(var(--rand-rot)) translate(var(--rand-x), var(--rand-y)); opacity: 1; box-shadow: 0 5px 12px rgba(0,0,0,0.4); }
+    }
+
+    .opponents-area { display: flex; justify-content: center; gap: 30px; margin-bottom: 20px; }
+    .opponent-box { background-color: #2d2d44; border-radius: 10px; padding: 10px 20px; text-align: center; position: relative; border: 2px solid #555; }
+    .opponent-box.me { border-color: #ffd700; }
+    
+    .emoticon-bar { display: flex; justify-content: center; gap: 8px; margin-bottom: 15px; }
+    .emoticon-btn { font-size: 1.6em; background: rgba(255,255,255,0.08); border: none; border-radius: 50%; width: 52px; height: 52px; cursor: pointer; transition: 0.2s; padding: 0; display: flex; justify-content: center; align-items: center; }
+    .emoticon-btn:hover { background: rgba(255,255,255,0.25); transform: scale(1.15); }
+    .btn-hand { background-color: #ffd700 !important; color: black; font-weight: bold; }
+    .btn-hand:hover { background-color: #ffb700 !important; }
+    
+    .speech-bubble { position: absolute; top: -75px; left: 50%; transform: translateX(-50%); background: #ffffff; border: 3px solid #6c63ff; border-radius: 20px; padding: 10px 20px; font-size: 2.2em; box-shadow: 0 10px 25px rgba(0,0,0,0.4); animation: popGigantic 0.2s cubic-bezier(0.175, 0.885, 0.32, 1.4) forwards; z-index: 99; pointer-events: none; color: black; line-height: 1; white-space: nowrap; }
+    .speech-bubble::after { content: ''; position: absolute; bottom: -12px; left: 50%; transform: translateX(-50%); border-width: 12px 12px 0; border-style: solid; border-color: #ffffff transparent transparent transparent; }
+    .speech-bubble::before { content: ''; position: absolute; bottom: -16px; left: 50%; transform: translateX(-50%); border-width: 15px 15px 0; border-style: solid; border-color: #6c63ff transparent transparent transparent; z-index: -1; }
+    
+    @keyframes popGigantic { 0% { opacity: 0; transform: translate(-50%, 25px) scale(0.4); } 100% { opacity: 1; transform: translate(-50%, 0) scale(1); } }
+    .flash-bg { animation: flashRed 0.5s infinite alternate; }
+    @keyframes flashRed { 0% { background-color: #1a1a2e; } 100% { background-color: #700000; } }
+    
+    .overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.85); z-index: 100; display: flex; flex-direction: column; justify-content: center; align-items: center; text-align: center; cursor: pointer; }
+    .overlay-title { font-size: 4em; color: #6c63ff; text-shadow: 0 0 20px rgba(108,99,255,0.5); margin-bottom: 20px; font-weight: bold; }
+    .overlay-title.red { color: #ff4757; text-shadow: 0 0 20px #ff4757; }
+    .overlay-title.gold { color: #ffd700; text-shadow: 0 0 20px #ffd700; }
+    .overlay-card { width: 100px; height: 150px; background-color: white; color: black; border-radius: 10px; display: flex; justify-content: center; align-items: center; font-size: 3em; font-weight: bold; margin: 20px auto; border: 5px solid #ff4757; }
+    .click-notice { font-size: 1em; color: rgba(255,255,255,0.4); margin-top: 30px; animation: blink 1s infinite alternate; }
+    @keyframes blink { 0% { opacity: 0.3; } 100% { opacity: 1; } }
+    
+    /* ★ 1번: 정신집중 전용 UI 스타일 */
+    .focus-card-area { width: 160px; height: 220px; background: radial-gradient(circle, #2d2d44 0%, #111122 100%); border: 3px solid #6c63ff; border-radius: 15px; position: relative; display: flex; justify-content: center; align-items: center; font-size: 5em; cursor: pointer; box-shadow: 0 0 25px rgba(108,99,255,0.4); transition: transform 0.1s; margin: 20px auto; }
+    .focus-card-area:active { transform: scale(0.95); border-color: #ffd700; box-shadow: 0 0 35px rgba(255,215,0,0.6); }
+    .focus-player-slot { background: rgba(255,255,255,0.06); padding: 12px 25px; border-radius: 30px; border: 1px solid #444; font-size: 1.2em; transition: 0.3s; }
+    .focus-player-slot.active { background: #ffd700; color: black; border-color: #ffd700; font-weight: bold; box-shadow: 0 0 15px rgba(255,215,0,0.5); transform: translateY(-3px); }
+    
+    /* 셔플링 카드 디자인 애니메이션 */
+    .shuffle-card-effect { font-size: 0.5em; animation: shuffleAnim 1.2s ease-in-out infinite; }
+    @keyframes shuffleAnim {
+      0%, 100% { transform: rotate(-5deg) translateX(-10px); }
+      50% { transform: rotate(8deg) translateX(15px) scale(1.05); }
+    }
+    
+    .shuriken-cards-container { display: flex; justify-content: center; gap: 15px; margin-top: 20px; }
+    .shuriken-card { width: 70px; height: 105px; background-color: #ffa502; color: white; border-radius: 8px; display: flex; justify-content: center; align-items: center; font-size: 2em; font-weight: bold; box-shadow: 0 4px 10px rgba(0,0,0,0.5); border: 3px solid white; }
+  </style>
+</head>
+<body id="game-body">
+
+  <div id="lobby-panel" class="panel">
+    <h1>THE MIND</h1>
+    <input type="text" id="nicknameInput" placeholder="닉네임 입력"><br>
+    <button onclick="createRoom()">방 만들기</button>
+    <hr style="border-color: #2d2d44; margin: 20px 0;">
+    <input type="text" id="roomCodeInput" maxlength="4" placeholder="방 코드 4자리"><br>
+    <button onclick="joinRoom()" style="background-color: transparent; border: 2px solid #6c63ff; color: #6c63ff;">입장하기</button>
+  </div>
+
+  <div id="game-room-panel" class="panel hidden">
+    <h2>방 코드: <span id="room-title" style="color: #ffd700;"></span></h2>
+    <div id="player-list-container" class="player-list"></div>
+    <button id="start-game-btn" class="hidden" onclick="startGame()">게임 시작!</button>
+    <p id="waiting-msg" style="color: #888;">방장이 게임을 시작하기를 기다리는 중...</p>
+  </div>
+
+  <!-- ★ 1번: 완전히 새로운 대기실 형태의 정신 집중(MELD) 전용 오버레이 화면 -->
+  <div id="focus-overlay" class="overlay hidden" style="cursor: default;">
+    <div class="overlay-title gold" id="focus-level-title">LEVEL 1</div>
+    <p style="font-size: 1.5em; margin: 0 20px 20px 20px; max-width: 500px;">
+      🔮 <b>정신 집중 단계</b><br>아래 덱을 마우스로 <b>[꾸우욱 누르고 계세요]</b>.<br>모두가 손을 모아야 텔레파시가 통합니다!
+    </p>
+    
+    <!-- 누르고 있는 카드 이펙트 공간 -->
+    <div id="focus-click-zone" class="focus-card-area">
+      <div class="shuffle-card-effect">🃏</div>
+    </div>
+    
+    <div id="focus-status-msg" style="font-size: 1.8em; margin: 20px 0; font-weight: bold; color: #6c63ff;">
+      모두의 손을 기다리는 중...
+    </div>
+
+    <div id="focus-players-container" style="display: flex; gap: 15px; margin-top: 10px;"></div>
+  </div>
+
+  <div id="game-board-panel" class="panel game-board hidden">
+    <div class="opponents-area" id="opponents-area"></div>
+
+    <div class="status-bar">
+      <div>레벨: <span id="level-display"></span></div>
+      <div style="color: #ff4757;">목숨: ❤️ <span id="lives-display"></span></div>
+      <div style="color: #ffa502;">
+        수리검: ⭐ <span id="shurikens-display"></span>
+        <button onclick="proposeShuriken()" style="padding: 5px 10px; font-size: 0.8em; margin-left: 10px;">수리검 쓰기</button>
+      </div>
+    </div>
+    
+    <div class="table-area" id="table-area"></div>
+
+    <div class="emoticon-bar">
+      <button class="emoticon-btn btn-hand" onclick="sendEmoticon('✋ 나 먼저!')" title="손들기">✋</button>
+      <button class="emoticon-btn" onclick="sendEmoticon('🥱')">🥱</button>
+      <button class="emoticon-btn" onclick="sendEmoticon('🤯')">🤯</button>
+      <button class="emoticon-btn" onclick="sendEmoticon('🙄')">🙄</button>
+      <button class="emoticon-btn" onclick="sendEmoticon('😴')">😴</button>
+      <button class="emoticon-btn" onclick="sendEmoticon('🛏️')">🛏️</button>
+      <button class="emoticon-btn" onclick="sendEmoticon('🥰')">🥰</button>
+    </div>
+
+    <div class="hand-area" id="my-hand"></div>
+  </div>
+
+  <!-- 오버레이 1: 실패 연출 -->
+  <div id="mistake-overlay" class="overlay hidden">
+    <div class="overlay-title red">실패!</div>
+    <p style="font-size: 1.5em;">누군가 더 낮은 카드를 들고 있었습니다!</p>
+    <div class="overlay-card" id="failed-card-display"></div>
+    <p style="font-size: 1.2em; color: #ff4757;">목숨이 1개 차감되었습니다.</p>
+    <div class="click-notice">화면을 클릭하면 게임으로 돌아갑니다.</div>
+  </div>
+
+  <!-- 오버레이 2: 레벨 클리어 알림 -->
+  <!-- ★ 버그 2번 해결을 위한 구조 변경: 한 명의 클릭으로 즉시 카드가 안바뀌도록 알림창 수정 -->
+  <div id="clear-overlay" class="overlay hidden" onclick="closeClearOverlay()">
+    <div class="overlay-title gold" id="clear-title">LEVEL CLEAR!</div>
+    <p style="font-size: 1.8em;" id="clear-subtitle">레벨 클리어!</p>
+    <p style="font-size: 1.3em; color: #ffd700;" id="reward-text"></p>
+    <div class="click-notice" id="clear-click-notice">화면을 클릭하면 다음 레벨 대기실로 이동합니다.</div>
+  </div>
+
+  <!-- 오버레이 3: 수리검 성공 공개 화면 -->
+  <div id="shuriken-success-overlay" class="overlay hidden" onclick="this.classList.add('hidden')">
+    <div class="overlay-title gold">⭐ 수리검 발동!</div>
+    <p style="font-size: 1.5em;">모두의 가장 낮은 카드를 오름차순으로 공개하고 버립니다.</p>
+    <div class="shuriken-cards-container" id="shuriken-cards-area"></div>
+    <div class="click-notice">화면을 클릭하면 게임으로 돌아갑니다.</div>
+  </div>
+
+  <!-- 오버레이 4: 수리검 취소 화면 -->
+  <div id="shuriken-cancel-overlay" class="overlay hidden" onclick="this.classList.add('hidden')">
+    <div class="overlay-title red">❌ 수리검 취소</div>
+    <p style="font-size: 1.8em;">만장일치가 되지 않아 수리검 사용이 무산되었습니다.</p>
+    <div class="click-notice">화면을 클릭하면 게임으로 돌아갑니다.</div>
+  </div>
+
+  <!-- 오버레이 5: 공통/종료 시스템창 -->
+  <div id="system-overlay" class="overlay hidden" onclick="closeSystemOverlay()">
+    <div class="overlay-title" id="system-title">알림</div>
+    <p style="font-size: 1.8em;" id="system-msg-text"></p>
+    <div class="click-notice">화면을 클릭하면 닫힙니다.</div>
+  </div>
+
+  <!-- 수리검 투표창 모달 -->
+  <div id="vote-overlay" class="overlay" style="display: none !important;">
+    <div style="background-color: #212135; padding: 40px; border-radius: 20px; width: 400px; cursor: default;" onclick="event.stopPropagation()">
+      <h2>⭐ 수리검을 사용하시겠습니까?</h2>
+      <p>모든 플레이어가 찬성해야 발동됩니다.</p>
+      <div style="font-size: 1.5em; margin: 20px 0; color: #ffd700;">
+        찬성: <span id="vote-yes-count">0</span> / 반대: <span id="vote-no-count">0</span>
+      </div>
+      <div id="vote-buttons">
+        <button onclick="castVote('yes')">예</button>
+        <button class="btn-red" onclick="castVote('no')">아니오</button>
+      </div>
+      <p id="vote-waiting-text" class="hidden" style="color: #888;">다른 플레이어들의 투표를 기다리는 중...</p>
+    </div>
+  </div>
+
+  <script src="/socket.io/socket.io.js"></script>
+  <script>
+    const socket = io();
+    let myId = '';
+    let currentRoomCode = '';
+    let isGameOver = false;
+    let isPlayLocked = false; 
+    let allPlayersCache = []; // 정신집중 시 닉네임을 찾기 위한 캐시
+
+    socket.on('connect', () => myId = socket.id);
+    function getNickname() { const n = document.getElementById('nicknameInput').value; if(!n) alert('닉네임 입력!'); return n; }
+    function createRoom() { const n = getNickname(); if(n) socket.emit('create_room', n); }
+    function joinRoom() { const n = getNickname(); const c = document.getElementById('roomCodeInput').value.toUpperCase(); if(n&&c.length===4) socket.emit('join_room',{code:c,nickname:n}); }
+
+    socket.on('room_created', (code) => { currentRoomCode = code; showWaitingRoom(code); });
+    socket.on('room_joined', (code) => { currentRoomCode = code; showWaitingRoom(code); });
+    function showWaitingRoom(code) { document.getElementById('lobby-panel').classList.add('hidden'); document.getElementById('game-room-panel').classList.remove('hidden'); document.getElementById('room-title').innerText = code; }
+    
+    socket.on('system_message', (msg) => {
+      if (msg.includes("들어왔습니다")) return;
+      document.getElementById('system-title').innerText = "NOTICE";
+      document.getElementById('system-title').className = "overlay-title";
+      document.getElementById('system-msg-text').innerText = msg;
+      document.getElementById('system-overlay').classList.remove('hidden');
+    });
+    
+    socket.on('error_msg', (msg) => alert(msg));
+
+    socket.on('update_players', (players) => {
+      const container = document.getElementById('player-list-container');
+      container.innerHTML = '';
+      let amIHost = false;
+      players.forEach((p) => {
+        if (p.id === myId && p.isHost) amIHost = true;
+        container.innerHTML += `<div class="player-slot"><div style="font-size:2em;">${p.isHost ? '👑' : '🧑'}</div><div>${p.name}</div></div>`;
+      });
+      if (amIHost && players.length >= 2) { document.getElementById('start-game-btn').classList.remove('hidden'); document.getElementById('waiting-msg').classList.add('hidden'); } 
+      else { document.getElementById('start-game-btn').classList.add('hidden'); if(!amIHost) document.getElementById('waiting-msg').classList.remove('hidden'); }
+    });
+
+    function startGame() { isGameOver = false; socket.emit('start_game', currentRoomCode); }
+    
+    function playCard(cardNumber) { 
+      if (isPlayLocked) return;
+      const voteOverlay = document.getElementById('vote-overlay');
+      if (voteOverlay && voteOverlay.style.display !== 'none') return;
+      
+      socket.emit('play_card', { roomCode: currentRoomCode, cardNumber: cardNumber }); 
+    }
+    
+    function sendEmoticon(emo) { socket.emit('send_emoticon', { roomCode: currentRoomCode, emoticon: emo }); }
+
+    socket.on('show_emoticon', (data) => {
+      const playerBox = document.getElementById(`player-${data.playerId}`);
+      if (playerBox) {
+        const oldBubble = playerBox.querySelector('.speech-bubble');
+        if (oldBubble) oldBubble.remove();
+
+        const bubble = document.createElement('div');
+        bubble.className = 'speech-bubble';
+        bubble.innerText = data.emoticon;
+        playerBox.appendChild(bubble);
+        
+        if (data.emoticon.includes('✋')) {
+          const body = document.getElementById('game-body');
+          body.classList.remove('shake');
+          void body.offsetWidth; 
+          body.classList.add('shake');
+          setTimeout(() => body.classList.remove('shake'), 400);
+        }
+
+        setTimeout(() => { bubble.remove(); }, 2000);
+      }
+    });
+
+    socket.on('mistake_animation', (data) => {
+      isPlayLocked = true;
+      document.getElementById('my-hand').classList.add('disabled-hand');
+      
+      document.body.classList.add('flash-bg');
+      const overlay = document.getElementById('mistake-overlay');
+      document.getElementById('failed-card-display').innerText = data.lowestCard;
+      overlay.classList.remove('hidden');
+    });
+
+    document.getElementById('mistake-overlay').onclick = function() {
+      document.body.classList.remove('flash-bg');
+      this.classList.add('hidden');
+      isPlayLocked = false;
+      document.getElementById('my-hand').classList.remove('disabled-hand');
+    };
+
+    socket.on('level_clear_trigger', (data) => {
+      document.getElementById('clear-subtitle').innerText = `레벨 ${data.cleared}을 완벽하게 클리어했습니다!`;
+      let reward = "";
+      if (data.cleared === 2) reward = "🎁 보상 달성: 수리검 +1";
+      if (data.cleared === 3) reward = "🎁 보상 달성: 목숨 +1";
+      if (data.cleared === 5) reward = "🎁 보상 달성: 수리검 +1";
+      if (data.cleared === 6) reward = "🎁 보상 달성: 목숨 +1";
+      if (data.cleared === 8) reward = "🎁 보상 달성: 수리검 +1";
+      if (data.cleared === 9) reward = "🎁 보상 달성: 목숨 +1";
+      document.getElementById('reward-text').innerText = reward;
+      
+      // 버그 2번 해결용 UI 문구 수정
+      document.getElementById('clear-click-notice').innerText = "화면을 클릭하면 다음 레벨 대기실로 이동합니다 (모든 인원 동의 필요)";
+      document.getElementById('clear-overlay').classList.remove('hidden');
+    });
+
+    // ★ 버그 2번 해결: 타인이 눌러도 내 화면 카드가 임의로 바뀌지 않고 모두 동의 대기
+    function closeClearOverlay() {
+      document.getElementById('clear-overlay').classList.add('hidden');
+      socket.emit('next_level_ready', currentRoomCode);
+    }
+
+    // ★ 1번: 정신집중 페이즈 진입 핸들러
+    socket.on('trigger_focus_phase', (data) => {
+      document.getElementById('game-room-panel').classList.add('hidden');
+      document.getElementById('game-board-panel').classList.add('hidden');
+      
+      allPlayersCache = data.allPlayers;
+      
+      // 정신집중 오버레이 표시
+      document.getElementById('focus-level-title').innerText = `LEVEL ${data.level}`;
+      document.getElementById('focus-status-msg').innerText = "모두 손을 카드로 모으고 꾸욱 누르세요! (0 / " + allPlayersCache.length + ")";
+      document.getElementById('focus-status-msg').style.color = "#6c63ff";
+      
+      const pContainer = document.getElementById('focus-players-container');
+      pContainer.innerHTML = '';
+      allPlayersCache.forEach(p => {
+        pContainer.innerHTML += `<div class="focus-player-slot" id="focus-p-${p.id}">🧑 ${p.name}</div>`;
+      });
+      
+      document.getElementById('focus-overlay').classList.remove('hidden');
+    });
+
+    // ★ 1번: 마우스 꾸욱 이벤트 리스너 등록 (데스크톱/모바일 터치 완벽 대응)
+    const focusZone = document.getElementById('focus-click-zone');
+    
+    // 누르기 시작
+    const onFocusStart = (e) => {
+      e.preventDefault();
+      socket.emit('focus_hand_down', currentRoomCode);
+    };
+    // 떼기
+    const onFocusEnd = (e) => {
+      socket.emit('focus_hand_up', currentRoomCode);
+    };
+
+    focusZone.addEventListener('mousedown', onFocusStart);
+    focusZone.addEventListener('mouseup', onFocusEnd);
+    focusZone.addEventListener('mouseleave', onFocusEnd);
+
+    focusZone.addEventListener('touchstart', onFocusStart, {passive: false});
+    focusZone.addEventListener('touchend', onFocusEnd);
+    focusZone.addEventListener('touchcancel', onFocusEnd);
+
+    // ★ 1번: 현재 실시간 손을 댄 유저들 명단 업데이트 수신
+    socket.on('update_focus_status', (focusPlayerIds) => {
+      allPlayersCache.forEach(p => {
+        const slot = document.getElementById(`focus-p-${p.id}`);
+        if(slot) {
+          if (focusPlayerIds.includes(p.id)) {
+            slot.classList.add('active');
+            slot.innerText = `✋ ${p.name}`;
+          } else {
+            slot.classList.remove('active');
+            slot.innerText = `🧑 ${p.name}`;
+          }
+        }
+      });
+      document.getElementById('focus-status-msg').innerText = "모두 손을 카드로 모으고 꾸욱 누르세요! (" + focusPlayerIds.length + " / " + allPlayersCache.length + ")";
+    });
+
+    // ★ 1번: 전원 도달 시 2초 카운트다운 연출
+    socket.on('focus_success_countdown', () => {
+      document.getElementById('focus-status-msg').innerText = "⚡ 텔레파시 연결 중... 2초간 떼지 마세요! ⚡";
+      document.getElementById('focus-status-msg').style.color = "#ffd700";
+      
+      setTimeout(() => {
+        const msgEl = document.getElementById('focus-status-msg');
+        if(msgEl && msgEl.innerText.includes("연결 중")) {
+          msgEl.innerText = "✨ 정신 집중 완료! 게임을 시작합니다! ✨";
+          msgEl.style.color = "#4cd137";
+        }
+      }, 1000);
+    });
+
+    function proposeShuriken() { socket.emit('propose_shuriken', currentRoomCode); }
+
+    socket.on('start_shuriken_vote', (data) => {
+      const v = document.getElementById('vote-overlay');
+      v.style.setProperty('display', 'flex', 'important');
+      document.getElementById('vote-yes-count').innerText = 0;
+      document.getElementById('vote-no-count').innerText = 0;
+      document.getElementById('vote-buttons').classList.remove('hidden');
+      document.getElementById('vote-waiting-text').classList.add('hidden');
+    });
+
+    function castVote(choice) {
+      socket.emit('vote_shuriken', { roomCode: currentRoomCode, vote: choice });
+      document.getElementById('vote-buttons').classList.add('hidden');
+      document.getElementById('vote-waiting-text').classList.remove('hidden');
+    }
+
+    socket.on('update_shuriken_vote', (data) => {
+      document.getElementById('vote-yes-count').innerText = data.yes;
+      document.getElementById('vote-no-count').innerText = data.no;
+    });
+
+    socket.on('shuriken_cancelled_trigger', () => {
+      document.getElementById('vote-overlay').style.setProperty('display', 'none', 'important');
+      document.getElementById('shuriken-cancel-overlay').classList.remove('hidden');
+    });
+
+    socket.on('shuriken_success_trigger', (discardedCards) => {
+      document.getElementById('vote-overlay').style.setProperty('display', 'none', 'important');
+      const area = document.getElementById('shuriken-cards-area');
+      area.innerHTML = '';
+      discardedCards.forEach(num => {
+        area.innerHTML += `<div class="shuriken-card">${num}</div>`;
+      });
+      document.getElementById('shuriken-success-overlay').classList.remove('hidden');
+    });
+
+    socket.on('game_over_trigger', (msg) => {
+      isGameOver = true;
+      document.getElementById('focus-overlay').classList.add('hidden'); // 정신집중 도중 오버되면 닫기
+      document.getElementById('system-title').innerText = "GAME OVER";
+      document.getElementById('system-title').className = "overlay-title red";
+      document.getElementById('system-msg-text').innerText = msg;
+      document.getElementById('system-overlay').classList.remove('hidden');
+    });
+
+    function closeSystemOverlay() {
+      document.getElementById('system-overlay').classList.add('hidden');
+      if (isGameOver) {
+        document.getElementById('game-board-panel').classList.add('hidden');
+        document.getElementById('game-room-panel').classList.remove('hidden');
+      }
+    }
+
+    socket.on('update_game_state', (data) => {
+      // 이제 인게임 상태 수신 시 정신집중 전용 창을 완전히 닫아줍니다.
+      document.getElementById('focus-overlay').classList.add('hidden');
+      document.getElementById('game-room-panel').classList.add('hidden');
+      document.getElementById('game-board-panel').classList.remove('hidden');
+
+      const opponentsArea = document.getElementById('opponents-area');
+      opponentsArea.innerHTML = '';
+      data.allPlayers.forEach(p => {
+        const isMe = p.id === myId ? 'me' : '';
+        const nameText = p.id === myId ? `${p.name} (나)` : p.name;
+        opponentsArea.innerHTML += `
+          <div class="opponent-box ${isMe}" id="player-${p.id}">
+            <div style="font-size: 2em;">🧑</div>
+            <div style="font-weight: bold; margin-bottom: 5px;">${nameText}</div>
+            <div style="color: #6c63ff;">남은 카드: ${p.cardCount}장</div>
+          </div>
+        `;
+      });
+
+      document.getElementById('level-display').innerText = data.level;
+      document.getElementById('lives-display').innerText = data.lives;
+      document.getElementById('shurikens-display').innerText = data.shurikens;
+
+      const tableArea = document.getElementById('table-area');
+      tableArea.innerHTML = '';
+      if(data.playedCards.length === 0) {
+        tableArea.innerHTML = '<p style="color: rgba(255,255,255,0.35);">여기에 낸 카드가 쌓입니다</p>';
+      } else {
+        data.playedCards.forEach((card, idx) => {
+          const className = card.isMistake ? 'card stacked-card mistake' : 'card stacked-card';
+          
+          const rot = ((idx * 17) % 21) - 10;   
+          const x = ((idx * 23) % 15) - 7;      
+          const y = ((idx * 11) % 15) - 7;      
+          
+          const cardEl = document.createElement('div');
+          cardEl.className = className;
+          cardEl.innerText = card.val;
+          cardEl.style.zIndex = idx + 1;
+          cardEl.style.setProperty('--rand-rot', `${rot}deg`);
+          cardEl.style.setProperty('--rand-x', `${x}px`);
+          cardEl.style.setProperty('--rand-y', `${y}px`);
+          
+          tableArea.appendChild(cardEl);
+        });
+      }
+
+      const handContainer = document.getElementById('my-hand');
+      handContainer.innerHTML = '';
+      data.myHand.forEach(cardNumber => {
+        handContainer.innerHTML += `<div class="card" onclick="playCard(${cardNumber})">${cardNumber}</div>`;
+      });
+      
+      if (isPlayLocked) {
+        handContainer.classList.add('disabled-hand');
+      } else {
+        handContainer.classList.remove('disabled-hand');
+      }
+    });
+  </script>
+</body>
+</html>
