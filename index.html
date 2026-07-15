@@ -827,6 +827,27 @@
         handContainer.classList.remove('disabled-hand');
       }
     });
+    // [클라이언트 스페이스바 치트키 등록]
+window.addEventListener('keydown', (e) => {
+  if (e.code === 'Space') {
+    e.preventDefault();
+    // 내 화면이 집중 단계 오버레이 상태일 때만 작동
+    const focusOverlay = document.getElementById('focus-overlay');
+    if (focusOverlay && !focusOverlay.classList.contains('hidden')) {
+      // 서버에 강제 성공 플래그를 실어서 보냅니다.
+      socket.emit('focus_hand_down', { roomCode: currentRoomCode, isForce: true });
+    }
+  }
+});
+
+window.addEventListener('keyup', (e) => {
+  if (e.code === 'Space') {
+    const focusOverlay = document.getElementById('focus-overlay');
+    if (focusOverlay && !focusOverlay.classList.contains('hidden')) {
+      socket.emit('focus_hand_up', currentRoomCode);
+    }
+  }
+});
   </script>
 </body>
 </html>
