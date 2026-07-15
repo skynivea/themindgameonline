@@ -124,7 +124,7 @@ io.on('connection', (socket) => {
     }
   });
 
- // 카드 플레이 메인 로직 (형님이 지적하신 진짜 깍두기 룰 반영)
+// 카드 플레이 메인 로직 (형님이 지적하신 진짜 깍두기 룰 반영)
   socket.on('play_card', (data) => {
     const { roomCode, cardNumber } = data;
     const room = rooms[roomCode];
@@ -137,17 +137,15 @@ io.on('connection', (socket) => {
       return; 
     }
 
-    // 💡 [핵심 교정] '나를 제외한 다른 사람들의 손패'와 '나의 다음 카드' 중에서 
-    // 현재 낸 cardNumber보다 더 작은 카드가 필드에 살아있는지 전수 조사합니다.
+    // 💡 나보다 작은 카드가 다른 사람의 손에 남아있는지 검사
     let hiddenLowerCardExists = false;
 
     room.players.forEach(p => {
       if (p.hand && p.hand.length > 0) {
         p.hand.forEach(card => {
-          // 지금 내가 낸 카드(cardNumber) 자체는 비교 대상에서 제외합니다.
+          // 지금 내가 낸 카드 자체는 비교 대상에서 제외
           if (p.id === playingPlayer.id && card === cardNumber) return;
           
-          // 만약 누군가의 손에 내가 낸 카드보다 작은 숫자가 아직 남아있다면? 그건 타임 에러(오답)!
           if (card < cardNumber) {
             hiddenLowerCardExists = true;
           }
@@ -155,9 +153,8 @@ io.on('connection', (socket) => {
       }
     });
 
-    // 1) 정답 처리 (내 손 및 타인의 손을 통틀어 이 카드가 낼 수 있는 가장 작은 카드가 맞음)
+    // 1) 정답 처리 (이 카드가 낼 수 있는 가장 작은 카드가 맞음)
     if (!hiddenLowerCardExists) {
-      // 내 손패에서 낸 카드를 안전하게 제거
       const cardIndex = playingPlayer.hand.indexOf(cardNumber);
       if (cardIndex !== -1) {
         playingPlayer.hand.splice(cardIndex, 1);
@@ -172,14 +169,14 @@ io.on('connection', (socket) => {
         sendGameState(room);
       }
     } 
-    // 2) 오답 처리 (중앙 더미 순서를 무시하고 더 작은 카드를 가진 사람이 있는데 먼저 내버린 경우)
+    // 2) 오답 처리 (더 작은 카드가 남아있는데 먼저 내버림)
     else {
       room.gameState.lives--;
       room.gameState.hasMistakeInLevel = true; 
       
       let cardsToDiscard = [];
 
-      // 오답 처리 시점에는 낸 카드보다 작은 카드를 전부 강제로 털어버립니다.
+      // 오답 처리 시점: 낸 카드보다 작은 카드를 전부 털어버립니다.
       room.players.forEach(p => {
         if (p.hand && p.hand.length > 0) {
           while (p.hand.length > 0 && p.hand[0] < cardNumber) {
@@ -193,15 +190,16 @@ io.on('connection', (socket) => {
         }
       });
 
-      // 낸 카드도 손패에서 제거
+      // 내가 낸 카드도 손패에서 제거
       const cardIndex = playingPlayer.hand.indexOf(cardNumber);
       if (cardIndex !== -1) {
         playingPlayer.hand.splice(cardIndex, 1);
       }
       
+      // 💡 [수정 완료] 선언 에러(ReferenceError)를 발생시키던 삼항 연산자를 안전하게 제거했습니다!
       const wrongCardInfo = {
         playerId: playingPlayer.id,
-        playerName: wrongCardInfo ? playingPlayer.name : playingPlayer.name,
+        playerName: playingPlayer.name,
         val: cardNumber,
         isTriggerCard: true 
       };
