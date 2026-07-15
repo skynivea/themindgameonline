@@ -235,12 +235,13 @@
 
     <div class="emoticon-bar">
       <button class="emoticon-btn btn-hand" onclick="sendEmoticon('✋ 나 먼저!')" title="손들기">✋</button>
-      <button class="emoticon-btn" onclick="sendEmoticon('🥱')">🥱</button>
       <button class="emoticon-btn" onclick="sendEmoticon('🤯')">🤯</button>
       <button class="emoticon-btn" onclick="sendEmoticon('🙄')">🙄</button>
       <button class="emoticon-btn" onclick="sendEmoticon('😴')">😴</button>
       <button class="emoticon-btn" onclick="sendEmoticon('🛏️')">🛏️</button>
       <button class="emoticon-btn" onclick="sendEmoticon('🥰')">🥰</button>
+      <button class="emoticon-btn" onclick="sendEmoticon('😒')">😒</button>
+      <button class="emoticon-btn" onclick="sendEmoticon('😭')">😭</button>
     </div>
 
     <div class="hand-area" id="my-hand"></div>
@@ -609,8 +610,19 @@
       }, 650); // 트리거 카드 우측 이동 시간 확보를 위한 대기시간
     });
     
+// 💡 틀린 적 있는지 플래그(hasMistake)로 판정하는 레벨 클리어 이벤트
     socket.on('level_clear_trigger', (data) => {
-      document.getElementById('clear-subtitle').innerText = `레벨 ${data.cleared}을 완벽하게 클리어했습니다!`;
+      
+      // 💡 한 번도 안 틀렸을 때만 '완벽하게' 멘트 출력!
+      if (!data.hasMistake) {
+        // 1) 노미스 퍼펙트 클리어
+        document.getElementById('clear-subtitle').innerText = `🔥 레벨 ${data.cleared}을 완벽하게 클리어했습니다!`;
+      } else {
+        // 2) 감점(오답)이 한 번이라도 있었던 경우
+        document.getElementById('clear-subtitle').innerText = `🎉 레벨 ${data.cleared} 클리어 완료!`;
+      }
+
+      // 🎁 보상 지급 로직 (기존 유지)
       let reward = "";
       if (data.cleared === 2) reward = "🎁 보상 달성: 수리검 +1";
       if (data.cleared === 3) reward = "🎁 보상 달성: 목숨 +1";
