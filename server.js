@@ -124,7 +124,7 @@ io.on('connection', (socket) => {
     }
   });
 
-  // 카드 플레이 메인 로직
+ // 카드 플레이 메인 로직 (형님이 지적하신 진짜 깍두기 룰 반영)
   socket.on('play_card', (data) => {
     const { roomCode, cardNumber } = data;
     const room = rooms[roomCode];
@@ -137,20 +137,33 @@ io.on('connection', (socket) => {
       return; 
     }
 
-    let lowestCard = 101;
+    // 💡 [핵심 교정] '나를 제외한 다른 사람들의 손패'와 '나의 다음 카드' 중에서 
+    // 현재 낸 cardNumber보다 더 작은 카드가 필드에 살아있는지 전수 조사합니다.
+    let hiddenLowerCardExists = false;
+
     room.players.forEach(p => {
-      if (p.hand && p.hand.length > 0 && p.hand[0] < lowestCard) {
-        lowestCard = p.hand[0];
+      if (p.hand && p.hand.length > 0) {
+        p.hand.forEach(card => {
+          // 지금 내가 낸 카드(cardNumber) 자체는 비교 대상에서 제외합니다.
+          if (p.id === playingPlayer.id && card === cardNumber) return;
+          
+          // 만약 누군가의 손에 내가 낸 카드보다 작은 숫자가 아직 남아있다면? 그건 타임 에러(오답)!
+          if (card < cardNumber) {
+            hiddenLowerCardExists = true;
+          }
+        });
       }
     });
 
-    // 1) 정답 처리
-    if (cardNumber === lowestCard) {
-      playingPlayer.hand.shift(); 
-      // 💡 [디버깅 포인트] 클라이언트의 기존 로직이 단순 숫자 배열을 원할 때를 위해 
-      // 오브젝트({val}) 형태와 순수 숫자 형태 둘 다 하이브리드로 호환되도록 강제 주입합니다.
+    // 1) 정답 처리 (내 손 및 타인의 손을 통틀어 이 카드가 낼 수 있는 가장 작은 카드가 맞음)
+    if (!hiddenLowerCardExists) {
+      // 내 손패에서 낸 카드를 안전하게 제거
+      const cardIndex = playingPlayer.hand.indexOf(cardNumber);
+      if (cardIndex !== -1) {
+        playingPlayer.hand.splice(cardIndex, 1);
+      } 
+      
       const cardObj = { val: cardNumber, isMistake: false };
-      // JavaScript의 편법을 이용해 객체 자체를 출력해도 숫자가 찍히고, .val을 불러도 숫자가 나오게 가공합니다.
       cardObj.toString = function() { return String(this.val); };
       
       room.gameState.playedCards.push(cardObj);
@@ -159,13 +172,14 @@ io.on('connection', (socket) => {
         sendGameState(room);
       }
     } 
-    // 2) 오답 처리
+    // 2) 오답 처리 (중앙 더미 순서를 무시하고 더 작은 카드를 가진 사람이 있는데 먼저 내버린 경우)
     else {
       room.gameState.lives--;
       room.gameState.hasMistakeInLevel = true; 
       
       let cardsToDiscard = [];
 
+      // 오답 처리 시점에는 낸 카드보다 작은 카드를 전부 강제로 털어버립니다.
       room.players.forEach(p => {
         if (p.hand && p.hand.length > 0) {
           while (p.hand.length > 0 && p.hand[0] < cardNumber) {
@@ -179,6 +193,7 @@ io.on('connection', (socket) => {
         }
       });
 
+      // 낸 카드도 손패에서 제거
       const cardIndex = playingPlayer.hand.indexOf(cardNumber);
       if (cardIndex !== -1) {
         playingPlayer.hand.splice(cardIndex, 1);
@@ -186,7 +201,7 @@ io.on('connection', (socket) => {
       
       const wrongCardInfo = {
         playerId: playingPlayer.id,
-        playerName: playingPlayer.name,
+        playerName: wrongCardInfo ? playingPlayer.name : playingPlayer.name,
         val: cardNumber,
         isTriggerCard: true 
       };
@@ -200,8 +215,6 @@ io.on('connection', (socket) => {
         room.gameState.playedCards.push(errCardObj);
       });
 
-      // 클라이언트가 오브젝트를 통째로 문자열 연산할 때 [object Object]가 뜨는 문제 방어
-      // 클라이언트의 애니메이션 패킷 규격을 완벽하게 평탄화(Flatten)하여 전달합니다.
       const cleanSequence = cardsToDiscard.map(item => {
         const o = { ...item };
         o.toString = function() { return String(this.val); };
