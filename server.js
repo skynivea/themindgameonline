@@ -319,7 +319,7 @@ io.on('connection', (socket) => {
     io.to(roomCode).emit('show_emoticon', { playerId: socket.id, emoticon: emoticon });
   });
 
-  // 연결 끊김 예외 처리 및 방 폭파
+// 연결 끊김 예외 처리 및 방 안전 폭파/초기화
   socket.on('disconnect', () => {
     if (!currentRoom || !rooms[currentRoom]) return;
     const room = rooms[currentRoom];
@@ -331,14 +331,24 @@ io.on('connection', (socket) => {
       if (room.players.length === 0) {
         delete rooms[currentRoom];
       } else {
+        // 남은 플레이어들에게 알림을 보내고 게임판 상태만 날려 대기실 전단계로 안전 복구
         io.to(currentRoom).emit('game_over_trigger', "🚨 플레이어가 퇴장하여 게임을 계속할 수 없습니다. 대기실로 돌아갑니다.");
-        delete rooms[currentRoom];
+        if (room.gameState) {
+          delete room.gameState; 
+        }
+        // 첫 번째 남은 사람을 방장으로 위임해 방 폭파 방지
+        room.players[0].isHost = true;
+        io.to(currentRoom).emit('update_players', room.players);
       }
     }
   });
 
-  // 집중 단계 초기화 알림
+// 집중 단계 초기화 알림 (다음 레벨 갈 때 포커스 완료 플래그 완벽 초기화)
   function startFocusPhase(room, roomCode) {
+    if (room.gameState) {
+      room.gameState.focusPlayers = [];
+      room.gameState.isFocusComplete = false; // ★ 다음 레벨 진행을 위해 반드시 false 리셋
+    }
     const playerInfos = room.players.map(p => ({ id: p.id, name: p.name }));
     io.to(roomCode).emit('trigger_focus_phase', {
       level: room.gameState.level,
@@ -348,7 +358,7 @@ io.on('connection', (socket) => {
     });
   }
 
-  // 패 돌리기
+  // 패 돌리기 (최초 진입 시 undefined 에러 원천 차단)
   function dealCards(room) {
     let deck = Array.from({length: 100}, (_, i) => i + 1);
     shuffle(deck);
@@ -357,7 +367,7 @@ io.on('connection', (socket) => {
 
     room.players.forEach(player => {
       player.hand = [];
-      player.shurikenCards = []; 
+      player.shurikenCards = []; // ★ 이제 처음 방에 들어온 상태에서도 안전하게 빈 배열로 선언됨
       for (let i = 0; i < room.gameState.level; i++) {
         player.hand.push(deck.pop());
       }
