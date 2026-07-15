@@ -72,27 +72,43 @@ io.on('connection', (socket) => {
     startFocusPhase(room, roomCode);
   });
 
-  // 합심(포커스) 손 내리기
-  socket.on('focus_hand_down', (roomCode) => {
+// 합심(포커스) 손 내리기 (정상 작동 + 강제 시작 대응)
+  socket.on('focus_hand_down', (data) => {
+    // 클라이언트가 단순 문자열(roomCode)을 보냈는지, 객체를 보냈는지 하이브리드 대응
+    const roomCode = typeof data === 'object' ? data.roomCode : data;
+    const isForce = typeof data === 'object' ? data.isForce : false;
+
     const room = rooms[roomCode];
     if (!room || !room.gameState || room.gameState.isFocusComplete) return;
 
-    if (!room.gameState.focusPlayers.includes(socket.id)) {
-      room.gameState.focusPlayers.push(socket.id);
-      io.to(roomCode).emit('update_focus_status', room.gameState.focusPlayers);
-      
-      if (room.gameState.focusPlayers.length === room.players.length) {
-        room.gameState.isFocusComplete = true;
-        io.to(roomCode).emit('focus_success_countdown');
-        
-        setTimeout(() => {
-          if (room && room.gameState) {
-            dealCards(room);
-            room.gameState.focusPlayers = [];
-            room.gameState.isFocusComplete = false;
-          }
-        }, 2000);
+    if (isForce) {
+      // 💡 [치트키 발동] 스페이스바를 누른 경우: 즉시 전원 성공 처리
+      room.players.forEach(p => {
+        if (!room.gameState.focusPlayers.includes(p.id)) {
+          room.gameState.focusPlayers.push(p.id);
+        }
+      });
+    } else {
+      // [정상 작동] 마우스로 직접 누른 경우: 누른 사람만 추가
+      if (!room.gameState.focusPlayers.includes(socket.id)) {
+        room.gameState.focusPlayers.push(socket.id);
       }
+    }
+
+    io.to(roomCode).emit('update_focus_status', room.gameState.focusPlayers);
+    
+    // 만약 전원이 다 눌렀거나, 치트키가 발동했다면 성공 처리
+    if (room.gameState.focusPlayers.length === room.players.length) {
+      room.gameState.isFocusComplete = true;
+      io.to(roomCode).emit('focus_success_countdown');
+      
+      setTimeout(() => {
+        if (room && room.gameState) {
+          dealCards(room);
+          room.gameState.focusPlayers = [];
+          room.gameState.isFocusComplete = false;
+        }
+      }, 2000);
     }
   });
 
