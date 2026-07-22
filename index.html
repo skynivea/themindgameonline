@@ -66,7 +66,6 @@
       100% { transform: scale(1) translateY(0) rotate(var(--rand-rot)) translate(var(--rand-x), var(--rand-y)); opacity: 1; box-shadow: 0 3px 8px rgba(0,0,0,0.4); }
     }
 
-    /* 특정 위치에서 목적지로 미끄러지듯 이동하는 카드 효과 (순간이동 차단용 수정) */
     .raining-card { 
       position: fixed; 
       background-color: #ffafb7; 
@@ -77,7 +76,6 @@
       transition: left 0.55s cubic-bezier(0.25, 1, 0.5, 1), top 0.55s cubic-bezier(0.25, 1, 0.5, 1), transform 0.55s cubic-bezier(0.25, 1, 0.5, 1), opacity 0.55s ease;
     }
 
-    /* 에러 발생 시 중앙 경고 !! 마크 연출 스타일 */
     .danger-indicator {
       position: absolute;
       font-size: 4.5rem;
@@ -129,10 +127,8 @@
     .shuriken-cards-container { display: flex; justify-content: center; gap: 10px; margin-top: 15px; flex-wrap: wrap; }
     .shuriken-card { width: 55px; height: 82px; background-color: #ffa502; color: white; border-radius: 6px; display: flex; justify-content: center; align-items: center; font-size: 1.5em; font-weight: bold; box-shadow: 0 4px 8px rgba(0,0,0,0.5); border: 2px solid white; }
 
-    /* 모달 알림창 디자인 최적화 */
     .modal-content { background-color: #212135; padding: 25px 20px; border-radius: 20px; width: 90%; max-width: 360px; box-sizing: border-box; text-align: center; }
     
-    /* 프로필 밑에 붙는 미니 카드 스타일 */
     .shuriken-mini-card {
       display: inline-flex;
       align-items: center;
@@ -247,7 +243,7 @@
     <div class="hand-area" id="my-hand"></div>
   </div>
 
-  <!-- 오버레이 1: 실패 연출 (디자인 유지용 요소만 유지, 사용은 생략) -->
+  <!-- 오버레이 1: 실패 연출 -->
   <div id="mistake-overlay" class="overlay hidden"></div>
 
   <!-- 오버레이 2: 레벨 클리어 알림 -->
@@ -409,7 +405,6 @@
       }
     });
 
-   /* 오름차순 실패 시 연출 함수: 형님의 개연성 + 중복 방지 피드백 반영 완료 */
     socket.on('mistake_animation', (data) => {
       isPlayLocked = true;
       document.getElementById('my-hand').classList.add('disabled-hand');
@@ -417,7 +412,6 @@
       const tableArea = document.getElementById('table-area');
       if (!tableArea) return;
 
-      // 1. 화면 진동 및 !! 경고 연출 시작
       const body = document.getElementById('game-body');
       body.classList.add('flash-bg', 'shake');
       
@@ -428,7 +422,6 @@
 
       setTimeout(() => { body.classList.remove('shake'); }, 400);
 
-      // 데이터 정제
       const mistakeSequence = data.sequence || [];
       let skippedList = [];
       
@@ -443,22 +436,16 @@
         skippedList.push({ val: fallbackVal, playerId: data.lowestCardPlayerId || myId, isTriggerCard: false });
       }
 
-      // 오름차순 정렬 (누락된 카드들 정렬용)
       skippedList.sort((a, b) => a.val - b.val);
 
-      // 잘못 낸 '트리거 카드' 특정 (내가 냈거나, 타인이 잘못 낸 카드)
       const triggerInfo = skippedList.find(c => c.isTriggerCard) || skippedList[skippedList.length - 1];
 
-      // ==========================================
-      // [단계 1] 중복 카드 제거 및 트리거 카드 우측 선 이동
-      // ==========================================
       let startX = window.innerWidth / 2;
       let startY = window.innerHeight - 100;
       
       const isTriggerMe = (triggerInfo.playerId === myId);
 
       if (isTriggerMe) {
-        // 내가 낸 카드라면: 내 손패(Hand)에서 실제 해당 카드 요소를 찾아 투명화시킵니다. (중복 방지)
         const handCards = document.getElementById('my-hand').querySelectorAll('.card');
         let actualHandCard = null;
         handCards.forEach(c => {
@@ -470,12 +457,10 @@
           startX = rect.left + rect.width / 2;
           startY = rect.top + rect.height / 2;
           
-          // ★ 중요: 손패의 카드가 복사된 것처럼 보이지 않게 즉시 투명화 및 터치 불가 처리
           actualHandCard.style.opacity = '0';
           actualHandCard.style.pointerEvents = 'none';
         }
       } else {
-        // 타인이 낸 카드라면: 해당 유저 프로필 위치에서 출발
         const pEl = document.getElementById(`player-${triggerInfo.playerId}`);
         if (pEl) {
           const rect = pEl.getBoundingClientRect();
@@ -485,12 +470,10 @@
         }
       }
 
-      // 우측 대기 공간 좌표 계산
       const tableRect = tableArea.getBoundingClientRect();
       const waitX = tableRect.left + tableRect.width + 15;
       const waitY = tableRect.top + tableRect.height / 2 - 39;
 
-      // 애니메이션용 가상 카드 생성 (손/프로필에서 출발)
       const triggerCard = document.createElement('div');
       triggerCard.className = 'card raining-card mistake-trigger';
       triggerCard.innerText = triggerInfo.val;
@@ -501,24 +484,18 @@
       triggerCard.style.zIndex = 550;
       document.body.appendChild(triggerCard);
 
-      // 리플로우 강제 후 우측 대기 장소로 슈우욱 이동 실행
       void triggerCard.offsetWidth;
 
       triggerCard.style.left = `${waitX}px`;
       triggerCard.style.top = `${waitY}px`;
-      triggerCard.style.transform = 'scale(1.1) rotate(15deg)'; // 주목도를 높이기 위해 약간 키우고 회전
+      triggerCard.style.transform = 'scale(1.1) rotate(15deg)';
       triggerCard.style.opacity = '1';
       triggerCard.style.boxShadow = '0 0 20px #ff4757';
 
-      // ==========================================
-      // [단계 2] 트리거 카드 이동 완료 후, 누락 카드들 순차 등장
-      // ==========================================
-      // 트리거 카드가 우측으로 완전히 이동(약 600ms 소요)한 뒤에 누락 카드 연출을 시작합니다.
       setTimeout(() => {
         let animIdx = 0;
         
         skippedList.forEach((cardInfo) => {
-          // 트리거 카드는 이미 우측에 있으므로 누락 카드 등장 목록에서 제외합니다.
           if (cardInfo.val === triggerInfo.val && cardInfo.playerId === triggerInfo.playerId) return;
 
           setTimeout(() => {
@@ -526,7 +503,6 @@
             let srcY = 100;
             
             if (cardInfo.playerId === myId) {
-              // 내 손패에 있던 누락 카드라면 손에서 실제 요소를 찾아서 투명화 시키고 출발
               const handCards = document.getElementById('my-hand').querySelectorAll('.card');
               let targetHandCard = null;
               handCards.forEach(c => { if(parseInt(c.innerText) === cardInfo.val) targetHandCard = c; });
@@ -539,7 +515,6 @@
                 targetHandCard.style.pointerEvents = 'none';
               }
             } else {
-              // 타인 프로필에서 출발
               const pEl = document.getElementById(`player-${cardInfo.playerId}`);
               if (pEl) {
                 const r = pEl.getBoundingClientRect();
@@ -550,7 +525,6 @@
               }
             }
 
-            // 누락 카드 생성 및 발사
             const rainCard = document.createElement('div');
             rainCard.className = 'card raining-card';
             rainCard.innerText = cardInfo.val;
@@ -571,14 +545,10 @@
             rainCard.style.transform = `scale(1) rotate(${rot}deg)`;
             rainCard.style.opacity = '1';
 
-          }, animIdx * 500); // 0.5초 간격으로 순서대로 날아옴
+          }, animIdx * 500);
           animIdx++;
         });
 
-        // ==========================================
-        // [단계 3] 누락 카드 정리 완료 후, 우측 대기 카드가 최종 합류
-        // ==========================================
-        // 모든 누락 카드가 테이블에 안착한 뒤 (누락 카드 수 * 500ms + 여유시간) 작동합니다.
         setTimeout(() => {
           const destX = tableRect.left + tableRect.width / 2 + (Math.random() * 40 - 20);
           const destY = tableRect.top + tableRect.height / 2 + (Math.random() * 30 - 15);
@@ -589,9 +559,6 @@
           triggerCard.style.top = `${destY - 39}px`;
           triggerCard.style.transform = `scale(1) rotate(${rot}deg)`;
 
-          // ==========================================
-          // [단계 4] 연출 종료 및 게임 자동 재개 (터치 대기 패널 완전 삭제)
-          // ==========================================
           setTimeout(() => {
             alertMark.remove();
             document.body.classList.remove('flash-bg');
@@ -601,28 +568,23 @@
             isPlayLocked = false;
             document.getElementById('my-hand').classList.remove('disabled-hand');
             
-            // 동기화 신호를 서버로 발송해 즉시 다음 턴을 진행시킵니다.
             socket.emit('play_card', { roomCode: currentRoomCode, cardNumber: 'SYNC_MISTAKE_DONE' });
           }, 900);
 
         }, animIdx * 500 + 300);
 
-      }, 650); // 트리거 카드 우측 이동 시간 확보를 위한 대기시간
+      }, 650);
     });
     
-// 💡 틀린 적 있는지 플래그(hasMistake)로 판정하는 레벨 클리어 이벤트
+    /* 레벨 클리어 이벤트 처리 */
     socket.on('level_clear_trigger', (data) => {
-      
-      // 💡 한 번도 안 틀렸을 때만 '완벽하게' 멘트 출력!
+      // 생명이 단 한 번도 차감되지 않은 경우에만 '완벽하게' 키워드 적용
       if (!data.hasMistake) {
-        // 1) 노미스 퍼펙트 클리어
         document.getElementById('clear-subtitle').innerText = `🔥 레벨 ${data.cleared}을 완벽하게 클리어했습니다!`;
       } else {
-        // 2) 감점(오답)이 한 번이라도 있었던 경우
         document.getElementById('clear-subtitle').innerText = `🎉 레벨 ${data.cleared} 클리어 완료!`;
       }
 
-      // 🎁 보상 지급 로직 (기존 유지)
       let reward = "";
       if (data.cleared === 2) reward = "🎁 보상 달성: 수리검 +1";
       if (data.cleared === 3) reward = "🎁 보상 달성: 목숨 +1";
@@ -641,7 +603,6 @@
       socket.emit('next_level_ready', currentRoomCode);
     }
 
-    /* 정신집중 페이즈 진입 */
     socket.on('trigger_focus_phase', (data) => {
       document.getElementById('game-room-panel').classList.add('hidden');
       document.getElementById('game-board-panel').classList.add('hidden');
@@ -728,7 +689,6 @@
       document.getElementById('shuriken-cancel-overlay').classList.remove('hidden');
     });
 
-    /* 수리검 발동 성공 */
     socket.on('shuriken_success_trigger', (discardedCards) => {
       document.getElementById('vote-overlay').style.setProperty('display', 'none', 'important');
       const area = document.getElementById('shuriken-cards-area');
@@ -741,11 +701,23 @@
       document.getElementById('shuriken-success-overlay').classList.remove('hidden');
     });
 
-    socket.on('game_over_trigger', (msg) => {
+    /* 게임 종료 / 최종 클리어 분기 로직 */
+    socket.on('game_over_trigger', (data) => {
       isGameOver = true;
       document.getElementById('focus-overlay').classList.add('hidden');
-      document.getElementById('system-title').innerText = "GAME OVER";
-      document.getElementById('system-title').className = "overlay-title red";
+      
+      // 전달받은 데이터가 객체 형태이거나 isWin 플래그가 포함되어 있는지 확인
+      const isWin = typeof data === 'object' ? data.isWin : false;
+      const msg = typeof data === 'object' ? data.msg : data;
+
+      if (isWin) {
+        document.getElementById('system-title').innerText = "VICTORY!";
+        document.getElementById('system-title').className = "overlay-title gold";
+      } else {
+        document.getElementById('system-title').innerText = "GAME OVER";
+        document.getElementById('system-title').className = "overlay-title red";
+      }
+      
       document.getElementById('system-msg-text').innerText = msg;
       document.getElementById('system-overlay').classList.remove('hidden');
     });
@@ -758,9 +730,7 @@
       }
     }
 
-    /* 게임 상태 업데이트 */
     socket.on('update_game_state', (data) => {
-      // 애니메이션 레이어가 화면을 가려 오작동 유발하는 것 철저히 차단
       document.querySelectorAll('.danger-indicator').forEach(el => el.remove());
       
       document.getElementById('focus-overlay').classList.add('hidden');
@@ -839,27 +809,25 @@
         handContainer.classList.remove('disabled-hand');
       }
     });
-    // [클라이언트 스페이스바 치트키 등록]
-window.addEventListener('keydown', (e) => {
-  if (e.code === 'Space') {
-    e.preventDefault();
-    // 내 화면이 집중 단계 오버레이 상태일 때만 작동
-    const focusOverlay = document.getElementById('focus-overlay');
-    if (focusOverlay && !focusOverlay.classList.contains('hidden')) {
-      // 서버에 강제 성공 플래그를 실어서 보냅니다.
-      socket.emit('focus_hand_down', { roomCode: currentRoomCode, isForce: true });
-    }
-  }
-});
 
-window.addEventListener('keyup', (e) => {
-  if (e.code === 'Space') {
-    const focusOverlay = document.getElementById('focus-overlay');
-    if (focusOverlay && !focusOverlay.classList.contains('hidden')) {
-      socket.emit('focus_hand_up', currentRoomCode);
-    }
-  }
-});
+    window.addEventListener('keydown', (e) => {
+      if (e.code === 'Space') {
+        e.preventDefault();
+        const focusOverlay = document.getElementById('focus-overlay');
+        if (focusOverlay && !focusOverlay.classList.contains('hidden')) {
+          socket.emit('focus_hand_down', { roomCode: currentRoomCode, isForce: true });
+        }
+      }
+    });
+
+    window.addEventListener('keyup', (e) => {
+      if (e.code === 'Space') {
+        const focusOverlay = document.getElementById('focus-overlay');
+        if (focusOverlay && !focusOverlay.classList.contains('hidden')) {
+          socket.emit('focus_hand_up', currentRoomCode);
+        }
+      }
+    });
   </script>
 </body>
 </html>
